@@ -25,43 +25,52 @@ def training_samples_from_strokeset(strokeset):
     for t in range(len(all_points) - PARAMS.sequence_len - 1):
         points_data = all_points[t: t + PARAMS.sequence_len]
         next_points_data = all_points[t + 1: t + 1 + PARAMS.sequence_len]
-        samples_list.append(Sample(points_data, next_points_data))
+        yield Sample(points_data, next_points_data)
 
-    return samples_list
+class minibatches_from_samples:
+    def __init__(self, preexisting_samples=[]):
+        self.samples_to_use = preexisting_samples
 
-def minibatches_from_samples(list_of_samples):
-    # Takes in a list of sample numpy arrays
-    # Shuffles them and puts them into minibatches (ignoring remainder)
-    random.shuffle(list_of_samples)
-    print(len(list_of_samples), PARAMS.batch_size)
-    for t in range(int(len(list_of_samples) / PARAMS.batch_size)):
-        yield Minibatch(list_of_samples[t:t+PARAMS.batch_size])
+    def __call__(self, list_of_samples):
+        # Takes in a list of sample objects and adds them to any still in memory
+        self.samples_to_use.extend(list_of_samples)
+
+        # Shuffles them and puts them into minibatches
+        random.shuffle(self.samples_to_use)
+        for t in range(int(len(self.samples_to_use) / PARAMS.batch_size)):
+            yield Minibatch(self.samples_to_use[t:t+PARAMS.batch_size])
+
+        # The remainder becomes the list of samples still to be used,
+        # to be added to the next call.
+        self.samples_to_use = self.samples_to_use[
+                                int(len(self.samples_to_use) / PARAMS.batch_size)
+                                * PARAMS.batch_size
+                                :]
 
 def minibatches_from_directory(dir, max_strokesets=None):
     # Takes a directory.
     # Reads all the strokesets from them
 
-    print("Reading files from {} ...".format(rootdir))
+    print("Reading files from {} ...".format(dir))
     strokesets = read_strokesets.all_strokesets_from_dir(PARAMS.samples_directory, max_strokesets=max_strokesets)
-    print("Done, read {} files.".format(len(all_strokesets)))
+    print("Done, read {} files.".format(len(strokesets)))
+    """TODO: make all_strokesets_from_dir a generator as well for MORE SPEED
+    / less boringness at the beginning"""
 
-    print("Creating samples from files...")
-    samples = sum([training_samples_from_strokeset(ss) for ss in strokesets], [])
-    print("All samples created; batching...")
-    minibatches = minibatches_from_samples(samples)
-
-    print("Done.")
-    return minibatches
+    for minibatch in minibatches_from_strokesets(strokesets):
+        yield minibatch
 
 def minibatches_from_strokesets(strokesets_list):
     # Takes a list of strokesets_list
     # Shuffles the list, then reads the strokesets one at a time and yields
     # minibatches as it goes.
     random.shuffle(strokesets_list)
-    preexisting_samples = []
+    minibatch_generator = minibatches_from_samples()
 
     for strokeset in strokesets_list:
-
+        strokeset_samples = training_samples_from_strokeset(strokeset)
+        for minibatch in minibatch_generator(strokeset_samples):
+            yield minibatch
 
 if __name__ == "__main__":
     print("Reading data from disk...")

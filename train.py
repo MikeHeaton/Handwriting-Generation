@@ -19,6 +19,7 @@ with tf.Session() as sess:
     dev_summary_writer = tf.train.SummaryWriter(dev_summary_directory, sess.graph)
 
     # Initialise model and related objects
+    print("Initialising model...")
     training_model = model.HandwritingModel()
     saver = tf.train.Saver()
     if PARAMS.use_saved:
