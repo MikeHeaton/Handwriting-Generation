@@ -30,7 +30,6 @@ def training_samples_from_strokeset(strokeset):
 class minibatches_from_samples:
     def __init__(self, preexisting_samples=[]):
         self.samples_to_use = preexisting_samples
-
     def __call__(self, list_of_samples):
         # Takes in a list of sample objects and adds them to any still in memory
         self.samples_to_use.extend(list_of_samples)
@@ -47,34 +46,33 @@ class minibatches_from_samples:
                                 * PARAMS.batch_size
                                 :]
 
-def minibatches_from_directory(dir, max_strokesets=None):
+def minibatch_generator_from_directory(dir, max_strokesets=None):
     # Takes a directory.
-    # Reads all the strokesets from them
+    # Reads all the strokesets, then yields it one at a time.
 
     print("Reading files from {} ...".format(dir))
     strokesets = read_strokesets.all_strokesets_from_dir(PARAMS.samples_directory, max_strokesets=max_strokesets)
     print("Done, read {} files.".format(len(strokesets)))
     """TODO: make all_strokesets_from_dir a generator as well for MORE SPEED
-    / less boringness at the beginning"""
+    / less boringness at the beginning. Need to figure out how to shuffle samples
+    if this is done."""
 
-    for minibatch in minibatches_from_strokesets(strokesets):
-        yield minibatch
+    def minibatch_generator():
+        for minibatch in minibatches_from_strokesets(strokesets):
+            yield minibatch
+
+    return minibatch_generator()
 
 def minibatches_from_strokesets(strokesets_list):
     # Takes a list of strokesets_list
     # Shuffles the list, then reads the strokesets one at a time and yields
     # minibatches as it goes.
     random.shuffle(strokesets_list)
+
+    # Initialise minibatch generator
     minibatch_generator = minibatches_from_samples()
 
     for strokeset in strokesets_list:
         strokeset_samples = training_samples_from_strokeset(strokeset)
         for minibatch in minibatch_generator(strokeset_samples):
             yield minibatch
-
-if __name__ == "__main__":
-    print("Reading data from disk...")
-    strokesets = read_strokesets.all_strokesets_from_dir(PARAMS.samples_directory, max_strokesets=None)
-    print("Sampling & batching training data...")
-    samples = sum([training_samples_from_strokeset(ss) for ss in strokesets], [])
-    print(len(samples))

@@ -5,23 +5,24 @@
 # PARAMS.foo.
 class Params():
     # --- Neural Network params ------
-    lstm_size = 100
+    lstm_size = 400
     number_of_layers = 3
     sequence_len = 300
-    learning_rate = 0.001
-
+    learning_rate = 0.00001
 
     num_gaussians = 20
     output_size = 6 * num_gaussians + 1
 
     # --- Model training params ------
-    samples_directory = "./training_data"
+    samples_directory = "./training_data/"
+    weights_directory = "./network_weights/"
     batch_size = 32
 
     num_epochs = 20
     use_saved = False
     eval_every = 100
-
+    record_every = 10
+    save_every = 1000
 
     # --- Data reading params ---
     data_scale = 0.001
