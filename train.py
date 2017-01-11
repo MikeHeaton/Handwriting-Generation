@@ -24,12 +24,13 @@ with tf.Session() as sess:
     print("Done.")
 
     # Set train/Dev Summary directories and writers
+    print("Setting up summary writers...")
     train_summary_directory = './summaries/train'
     train_summary_writer = tf.train.SummaryWriter(train_summary_directory, sess.graph)
+    print("Done train summary")
     dev_summary_directory = './summaries/dev'
     dev_summary_writer = tf.train.SummaryWriter(dev_summary_directory, sess.graph)
-
-
+    print("Done.")
 
     """
     Define the training and eval functions

@@ -42,7 +42,6 @@ class HandwritingModel:
             if (not self.generate_mode) and PARAMS.dropout_keep_prob < 1:
                 stacked_lstm_cell = tf.nn.rnn_cell.DropoutWrapper(stacked_lstm_cell, output_keep_prob = PARAMS.dropout_keep_prob)
 
-            print(stacked_lstm_cell.state_size)
             lstm_zero_state = stacked_lstm_cell.zero_state(
                                                     batch_size=batch_size,
                                                     dtype=tf.float32)
@@ -53,6 +52,7 @@ class HandwritingModel:
                             )
 
             """
+            # Dynamic_rnn implementation
             lstm_outputs, self.last_state = tf.nn.dynamic_rnn(
                             cell=stacked_lstm_cell,
                             inputs=self.input_placeholder,
@@ -60,22 +60,16 @@ class HandwritingModel:
                             dtype=tf.float32
                             )"""
 
+            # Seq2seq implementation
             inputs = tf.split(1, sequence_len, self.input_placeholder)
             inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
-            print("inputs: ", inputs)
+
             lstm_outputs, self.last_state = tf.nn.seq2seq.rnn_decoder(
                                                     inputs,
                                                     initial_state=self.initial_state_placeholder,
                                                     cell=stacked_lstm_cell,
                                                     loop_function=None)
-            print(lstm_outputs)
-            lstm_outputs = tf.reshape(tf.concat(1, outputs), [-1, args.rnn_size])
-            output = tf.nn.xw_plus_b(output, output_w, output_b)
-            self.final_state = last_state
-
-            # reshape target data so that it is compatible with prediction shape
-            flat_target_data = tf.reshape(self.target_data,[-1, 3])
-            [x1_data, x2_data, eos_data] = tf.split(1, 3, flat_target_data)
+            lstm_outputs = tf.reshape(tf.concat(1, lstm_outputs), [batch_size, sequence_len, PARAMS.lstm_size])
 
         with tf.name_scope("FC_LAYER"):
             W = tf.get_variable("W_out",

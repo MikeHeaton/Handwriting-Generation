@@ -7,7 +7,7 @@ class Params():
     # --- Neural Network params ------
     lstm_size = 400
     number_of_layers = 3
-    sequence_len = 300
+    sequence_len = 50
     learning_rate = 0.00001
 
     num_gaussians = 20
