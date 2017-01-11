@@ -44,7 +44,8 @@ class StrokeSet(object):
         for x, stroke in enumerate(self.strokes):
             coordinates = [p.coordinates() for p in stroke.points]
             x_points, y_points = zip(*coordinates)
-            ax.scatter(x_points, y_points, s=1, c=jet(100*x % 256), lw=0)
+            #ax.scatter(x_points, y_points, s=1, c=jet(100*x % 256), lw=0)
+            ax.plot(x_points, y_points)
         fig.savefig('testplot.png')
         """TODO: clean this up. Put 'plot' methods in the strokes?"""
 

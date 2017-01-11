@@ -6,17 +6,21 @@ import numpy as np
 from read_strokesets import Point, Stroke, StrokeSet
 from tqdm import tqdm
 
-def generate_sample(length=500):
+def generate_sample(length=500, use_saved=True):
     with tf.Session() as sess:
+        print("Creating model...")
         generating_model = model.HandwritingModel(generate_mode=True)
 
-        sess.run(tf.initialize_all_variables())
-        #saver = tf.train.Saver()
-        #saver.restore(sess, tf.train.latest_checkpoint(PARAMS.weights_directory))
+        if use_saved:
+            print("Loading variables...")
+            saver = tf.train.Saver()
+            saver.restore(sess, tf.train.latest_checkpoint(PARAMS.weights_directory))
+        else:
+            print("Initialising random variables...")
+            sess.run(tf.initialize_all_variables())
+        print("Done.")
 
-        print("MODEL MADE")
         def sample_from_gaussians(mu1, mu2, sigma1, sigma2, rho):
-            print(mu1, mu2)
             # Sample from some number of 2d gaussians, given their parameters.
             # The covariance matrix is  [s1*s1      s1*s2*rho   ]
             #                           [s1*s2*rho  s2*s2       ]
@@ -32,9 +36,8 @@ def generate_sample(length=500):
         prev_point = np.array([[[0.0, 0.0, 1]]])
         prev_state = np.zeros([1, 2*PARAMS.lstm_size*PARAMS.number_of_layers])
 
+        print("Generating points...")
         all_offsets = []
-
-        print("Generating")
         for _ in tqdm(range(length)):
             feed_dict = {generating_model.input_placeholder        : prev_point,
                          generating_model.initial_state_placeholder: prev_state}
@@ -51,7 +54,12 @@ def generate_sample(length=500):
                                     generating_model.p_sigma2,
                                     generating_model.last_state],
                                     feed_dict = feed_dict)
-
+            #print("bernoulli_param", bernoulli_param)
+            #print("pi", pi.shape)
+            #print("rho", rho)
+            #print("mu1 mu2", mu1, mu2)
+            #print("sigma1 sigma2", sigma1, sigma2)
+            #print("Prev state", prev_state)
             gaussian_points = sample_from_gaussians(mu1, mu2,
                                                     sigma1, sigma2, rho)
             weighted_points = np.reshape(pi, [-1, 1]) * gaussian_points
@@ -59,7 +67,7 @@ def generate_sample(length=500):
 
             end_stroke = np.random.binomial(1, bernoulli_param, size=None)
 
-            prev_point = np.reshape(np.append(predicted_offset, 0), [1, 1, -1])
+            prev_point = np.reshape(np.append(predicted_offset, end_stroke), [1, 1, -1])
             all_offsets.append(np.squeeze(prev_point))
 
         return np.array(all_offsets)
@@ -71,9 +79,7 @@ def strokeset_from_offsets(all_offsets):
     strokeset_strokes = []
     point=Point(0,0)
     stroke_points = [point]
-    t = 0
     for t in range(len(point_offsets)):
-        # point[2] is zero until the last point in a stroke
         point = Point(point.x + all_offsets[t,0],
                       point.y + all_offsets[t,1])
         print(point)
@@ -86,7 +92,7 @@ def strokeset_from_offsets(all_offsets):
     return StrokeSet(strokeset_strokes)
 
 if __name__ == "__main__":
-    point_offsets = generate_sample(length=10)
+    point_offsets = generate_sample(length=500)
 
     print("Making strokeset")
     strokeset = strokeset_from_offsets(point_offsets)

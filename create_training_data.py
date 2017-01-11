@@ -73,6 +73,7 @@ def minibatches_from_strokesets(strokesets_list):
     minibatch_generator = minibatches_from_samples()
 
     for strokeset in strokesets_list:
+        print("Reading from new strokeset")
         strokeset_samples = training_samples_from_strokeset(strokeset)
         for minibatch in minibatch_generator(strokeset_samples):
             yield minibatch

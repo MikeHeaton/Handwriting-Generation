@@ -39,6 +39,30 @@ with tf.Session() as sess:
         feed_dict = {training_model.input_placeholder : minibatch.points_data,
                         training_model.next_inputs_placeholder : minibatch.next_points_data}
 
+        """print("points ->\n", minibatch.points_data)
+        print("next points ->\n", minibatch.next_points_data)
+        stop = input()
+
+        (bernoulli_param, pi, rho,
+        mu1, mu2,
+        sigma1, sigma2,
+        prev_state) = sess.run([training_model.p_bernoulli,
+                                training_model.p_pi,
+                                training_model.p_rho,
+                                training_model.p_mu1,
+                                training_model.p_mu2,
+                                training_model.p_sigma1,
+                                training_model.p_sigma2,
+                                training_model.last_state],
+                                feed_dict = feed_dict)
+        #print("bernoulli_param", bernoulli_param)
+        print("pi", pi)
+        #print("rho", rho)
+        #print("mu1 mu2", mu1, mu2)
+        #print("sigma1 sigma2", sigma1, sigma2)
+        inp = input()
+        #print("Prev state", prev_state)"""
+
         _, current_step, summary = sess.run([training_model.reinforcement_train_op,
                                             training_model.global_step,
                                             training_model.summaries],
@@ -79,12 +103,11 @@ with tf.Session() as sess:
         print("Fetching training data...")
         training_data_generator = create_training_data.minibatch_generator_from_directory(
                                                         PARAMS.samples_directory
-                                                        # , max_strokesets=10)
+                                                        #, max_strokesets=10
                                                         )
         print("Training...")
         run_epoch(training_data_generator)
 
-"""On the list:
-
+"""On the TODO list:
 Implement evaluation / test (what's the correct word for it?)
 """

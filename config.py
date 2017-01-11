@@ -12,6 +12,7 @@ class Params():
 
     num_gaussians = 20
     output_size = 6 * num_gaussians + 1
+    dropout_keep_prob = 0.8
 
     # --- Model training params ------
     samples_directory = "./training_data/"
@@ -22,7 +23,7 @@ class Params():
     use_saved = False
     eval_every = 100
     record_every = 10
-    save_every = 1000
+    save_every = 100
 
     # --- Data reading params ---
     data_scale = 0.001
