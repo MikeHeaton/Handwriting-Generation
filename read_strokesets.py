@@ -41,11 +41,13 @@ class StrokeSet(object):
         ax.set_aspect('equal', 'datalim')
         ax.invert_yaxis()
         jet = plt.get_cmap('jet')
-        for x, stroke in enumerate(self.strokes):
+        for t, stroke in enumerate(self.strokes):
+            # print([(s.x, s.y) for s in stroke.points])
             coordinates = [p.coordinates() for p in stroke.points]
             x_points, y_points = zip(*coordinates)
-            #ax.scatter(x_points, y_points, s=1, c=jet(100*x % 256), lw=0)
-            ax.plot(x_points, y_points)
+            #print(x_points, y_points)
+            #ax.scatter(x_points, y_points, s=1, c=jet(100*t % 256), lw=0)
+            ax.plot(x_points, y_points, c=jet(100*t % 256), lw=1)
         fig.savefig('testplot.png')
         """TODO: clean this up. Put 'plot' methods in the strokes?"""
 

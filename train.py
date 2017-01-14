@@ -27,18 +27,21 @@ with tf.Session() as sess:
     print("Setting up summary writers...")
     train_summary_directory = './summaries/train'
     train_summary_writer = tf.train.SummaryWriter(train_summary_directory, sess.graph)
-    print("Done train summary")
+    print("Created train summary")
     dev_summary_directory = './summaries/dev'
     dev_summary_writer = tf.train.SummaryWriter(dev_summary_directory, sess.graph)
-    print("Done.")
+    print("Created dev summary.")
 
     """
     Define the training and eval functions
     """
 
-    def run_train_step(minibatch):
+    def run_train_step(minibatch, init_state=None):
+        if init_state is None:
+            init_state = training_model.lstm_zero_state.eval()
         feed_dict = {training_model.input_placeholder : minibatch.points_data,
-                        training_model.next_inputs_placeholder : minibatch.next_points_data}
+                        training_model.next_inputs_placeholder : minibatch.next_points_data,
+                        training_model.initial_state_placeholder : init_state}
 
         """print("points ->\n", minibatch.points_data)
         print("next points ->\n", minibatch.next_points_data)
@@ -64,31 +67,38 @@ with tf.Session() as sess:
         inp = input()
         #print("Prev state", prev_state)"""
 
-        _, current_step, summary = sess.run([training_model.reinforcement_train_op,
+        _, current_step, summary, loss, last_state = sess.run([training_model.reinforcement_train_op,
                                             training_model.global_step,
-                                            training_model.summaries],
+                                            training_model.summaries,
+                                            training_model.total_loss,
+                                            training_model.last_state],
                                             feed_dict = feed_dict)
 
         if current_step % PARAMS.record_every == 0:
             train_summary_writer.add_summary(summary, current_step)
+
+        return last_state
 
     def run_all_dev(dev_set):
         print("""TODO: add evaluation""")
 
     def run_epoch(training_data):
 
-        for minibatch in tqdm(training_data):
-            run_train_step(minibatch)
+        for file_group in tqdm(training_data):
+            init_state = None
 
-            current_step = tf.train.global_step(sess, training_model.global_step)
-            if current_step % PARAMS.eval_every == 0:
-                pass
-                """TODO: add eval"""
-                #print("Evaluating at step {}:".format(current_step))
-                #run_all_dev(None)
-            if current_step % PARAMS.save_every == 0:
-                saver.save(sess, PARAMS.weights_directory,
-                            global_step=training_model.global_step)
+            for minibatch in file_group:
+                init_state = run_train_step(minibatch, init_state)
+
+                current_step = tf.train.global_step(sess, training_model.global_step)
+                if current_step % PARAMS.eval_every == 0:
+                    pass
+                    """TODO: add eval"""
+                    #print("Evaluating at step {}:".format(current_step))
+                    #run_all_dev(None)
+                if current_step % PARAMS.save_every == 0:
+                    saver.save(sess, PARAMS.weights_directory,
+                                global_step=training_model.global_step)
 
 
     """

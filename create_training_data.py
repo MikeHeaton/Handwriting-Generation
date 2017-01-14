@@ -19,6 +19,7 @@ def training_samples_from_strokeset(strokeset):
     # from the strokeset. CURRENTLY we're returning all the sequences
     # of full length, ie those starting in positions up to len - sequence_len.
     """TODO: consider/test if this is the best method"""
+
     all_points = strokeset.to_numpy()
     samples_list = []
 
@@ -46,7 +47,7 @@ class minibatches_from_samples:
                                 * PARAMS.batch_size
                                 :]
 
-def minibatch_generator_from_directory(dir, max_strokesets=None):
+def legacy_minibatch_generator_from_directory(dir, max_strokesets=None):
     # Takes a directory.
     # Reads all the strokesets, then yields it one at a time.
 
@@ -77,3 +78,47 @@ def minibatches_from_strokesets(strokesets_list):
         strokeset_samples = training_samples_from_strokeset(strokeset)
         for minibatch in minibatch_generator(strokeset_samples):
             yield minibatch
+
+
+"""-------------------------------------------------"""
+"""-------------------------------------------------"""
+"""-------------------------------------------------"""
+"""-------------------------------------------------"""
+
+def minibatch_generator_from_directory(dir, max_strokesets=None):
+    print("Reading files from {} ...".format(dir))
+    strokesets = read_strokesets.all_strokesets_from_dir(PARAMS.samples_directory, max_strokesets=max_strokesets)
+    print("Done, read {} files.".format(len(strokesets)))
+
+    random.shuffle(strokesets)
+    strokesets.sort(key=lambda s:(len(s.to_numpy())-1)//PARAMS.sequence_len)
+
+    for file_group in range( len(strokesets)//PARAMS.batch_size):
+        yield v2_minibatches_from_list_of_strokesets(strokesets[file_group*PARAMS.batch_size: (file_group+1)*PARAMS.batch_size])
+
+
+def v2_minibatches_from_list_of_strokesets(strokesets_list):
+    # Takes a list of PARAMS.batch_size strokesets.
+    # Makes as many minibatches as possible from them and returns a generator.
+    def minibatch_generator():
+        all_strokedata= [s.to_numpy() for s in strokesets_list]
+        minibatches_in_sample = min([(len(s)-1)//PARAMS.sequence_len for s in all_strokedata])
+        #print("{} MINIBATCHES IN THESE SAMPLES".format(minibatches_in_sample))
+        for t in range(minibatches_in_sample):
+            points_data = [s[t*PARAMS.sequence_len: (t+1)*PARAMS.sequence_len] for s in all_strokedata]
+            next_points_data = [s[1+t*PARAMS.sequence_len: 1+(t+1)*PARAMS.sequence_len] for s in all_strokedata]
+            yield Minibatch([Sample(points_data[i], next_points_data[i]) for i in range(len(points_data))])
+
+    return minibatch_generator()
+
+if __name__ == "__main__":
+    training_data_generators = minibatch_generator_from_directory(
+                                                    PARAMS.samples_directory
+                                                    , max_strokesets=100
+                                                    )
+    for group in training_data_generators:
+        print("NEW FILE GROUP")
+        for x in group:
+            print("POINTS\n",x.points_data.shape)
+            print("NEXT POINTS\n",x.next_points_data.shape)
+            print("--")

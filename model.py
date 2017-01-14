@@ -42,12 +42,12 @@ class HandwritingModel:
             if (not self.generate_mode) and PARAMS.dropout_keep_prob < 1:
                 stacked_lstm_cell = tf.nn.rnn_cell.DropoutWrapper(stacked_lstm_cell, output_keep_prob = PARAMS.dropout_keep_prob)
 
-            lstm_zero_state = stacked_lstm_cell.zero_state(
+            self.lstm_zero_state = stacked_lstm_cell.zero_state(
                                                     batch_size=batch_size,
                                                     dtype=tf.float32)
 
             self.initial_state_placeholder = tf.placeholder_with_default(
-                            lstm_zero_state,
+                            self.lstm_zero_state,
                             shape=[batch_size, PARAMS.lstm_size*2*PARAMS.number_of_layers]
                             )
 

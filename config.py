@@ -20,7 +20,7 @@ class Params():
     batch_size = 32
 
     num_epochs = 20
-    use_saved = False
+    use_saved = True
     eval_every = 100
     record_every = 10
     save_every = 100

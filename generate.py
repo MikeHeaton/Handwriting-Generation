@@ -55,7 +55,7 @@ def generate_sample(length=500, use_saved=True):
                                     generating_model.last_state],
                                     feed_dict = feed_dict)
             #print("bernoulli_param", bernoulli_param)
-            #print("pi", pi.shape)
+            print("pi", pi)
             #print("rho", rho)
             #print("mu1 mu2", mu1, mu2)
             #print("sigma1 sigma2", sigma1, sigma2)
@@ -82,17 +82,22 @@ def strokeset_from_offsets(all_offsets):
     for t in range(len(point_offsets)):
         point = Point(point.x + all_offsets[t,0],
                       point.y + all_offsets[t,1])
-        print(point)
+        #print(point.x, point.y)
         stroke_points.append(point)
 
         if all_offsets[t,2] == 1 or t == len(point_offsets) - 1:
             # When the third arg is 1, it's the end of a stroke.
+            # print(stroke_points)
+            newstroke = Stroke(stroke_points)
+            # print(newstroke.points)
             strokeset_strokes.append(Stroke(stroke_points))
             stroke_points = []
+    newstrokeset = StrokeSet(strokeset_strokes)
+    #print(newstrokeset.strokes)
     return StrokeSet(strokeset_strokes)
 
 if __name__ == "__main__":
-    point_offsets = generate_sample(length=500)
+    point_offsets = generate_sample(length=50)
 
     print("Making strokeset")
     strokeset = strokeset_from_offsets(point_offsets)
