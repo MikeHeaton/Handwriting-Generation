@@ -16,12 +16,7 @@ class Minibatch():
         self.offsets_data = np.array([x.offsets_data for x in list_of_samples])
         self.next_offsets_data = np.array([x.next_offsets_data for x in list_of_samples])
 
-"""-------------------------------------------------"""
-"""-------------------------------------------------"""
-"""-------------------------------------------------"""
-"""-------------------------------------------------"""
-
-def minibatch_generator_from_directory(dir, max_strokesets=100):
+def minibatch_generator_from_directory(dir, max_strokesets=None):
     # Input: a relative directory path
     # Returns: minibatches created from data from the directory
     print("Reading files from {} ...".format(dir))

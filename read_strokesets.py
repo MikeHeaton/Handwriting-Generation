@@ -112,6 +112,7 @@ def all_strokesets_from_dir(rootdir, max_strokesets=None, use_scale=True):
         data_scale = np.genfromtxt(PARAMS.samples_directory + "/" + PARAMS.data_scale_file)
     else:
         data_scale = False
+
     for subdir, dirs, files in os.walk(rootdir):
         for file in files:
             if not (file.startswith('.')) and not file == PARAMS.data_scale_file:

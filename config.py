@@ -11,9 +11,9 @@ class Params():
     data_scale_file = "data_scale_params"
 
     # --- Neural Network params ------
-    lstm_size = 256
-    number_of_layers = 1
-    sequence_len = 300
+    lstm_size = 400
+    number_of_layers = 3
+    sequence_len = 400
 
     num_gaussians = 20
     output_size = 6 * num_gaussians + 1
@@ -24,12 +24,13 @@ class Params():
     # --- Model training params ------
 
     weights_directory = "./network_weights/"
-    batch_size = 1
+    batch_size = 32
 
-    learning_rate_init = 0.05
-    learning_rate_decay = 0.99
+    learning_rate_init = 0.00005
+    learning_rate_decay = 0.95
 
     num_epochs = 200
+    restrict_samples = None
     use_saved = False
     eval_every = 100
     record_every = 10

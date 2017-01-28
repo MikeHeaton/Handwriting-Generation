@@ -83,18 +83,19 @@ class HandwritingModel:
                             shape=[PARAMS.output_size],
                             initializer= tf.contrib.layers.xavier_initializer()
                             )
+
             lstm_outputs = tf.reshape(lstm_outputs, [-1, PARAMS.lstm_size])
+
             output_layer = tf.matmul(lstm_outputs, W)
             output_layer = tf.add(output_layer, b)
             output_layer = tf.reshape(output_layer, [batch_size,
                                                      sequence_len,
                                                      -1])
+
             """TODO: make this tensor multiplication into a pattern,
             to make it neater to reuse"""
 
             network_output = output_layer
-            #network_output = tf.sigmoid(output_layer,
-            #                                 name="network_output")
 
         with tf.name_scope("LOSS"):
             # Read the actual points data for training and split.
@@ -121,27 +122,30 @@ class HandwritingModel:
                                                      PARAMS.num_gaussians,
                                                      6])
 
+            #predicted_gaussian_params = tf.check_numerics(predicted_gaussian_params, "predicted_gaussian_params", name=None)
+
             phat_pi, phat_mu1, phat_mu2, phat_sigma1, phat_sigma2, phat_rho = (tf.squeeze(x, axis=3) for x in tf.split(3, 6, predicted_gaussian_params))
 
             # Transform the phat (p-hat) parameters into proper distribution
             # parameters, by normalising them as described in
             # https://arxiv.org/pdf/1308.0850v5.pdf page 20.
-            self.p_pi = tf.nn.softmax(phat_pi, name="self.p_pi")
+            self.p_pi = tf.nn.softmax(1e-10 + phat_pi, name="self.p_pi")
             self.p_mu1 = phat_mu1
             self.p_mu2 = phat_mu2
             self.p_sigma1 = tf.exp(phat_sigma1)
             self.p_sigma2 = tf.exp(phat_sigma2)
-            self.p_rho = tf.tanh(phat_rho)
+            self.p_rho = tf.tanh(1e-10 + phat_rho)
+
 
             def density_2d_gaussian(x1, x2, mu1, mu2, sigma1, sigma2, rho):
-                Z = (tf.divide(tf.square(x1 - mu1), tf.square(sigma1)) +
-                    tf.divide(tf.square(x2 - mu2), tf.square(sigma2)) -
-                    tf.divide(2 * rho * (x1 - mu1) * (x1 - mu2), sigma1 * sigma2))
+                Z = (tf.divide(tf.square(x1 - mu1), 1e-10 + tf.square(sigma1)) +
+                    tf.divide(tf.square(x2 - mu2), 1e-10 + tf.square(sigma2)) -
+                    tf.divide(2 * rho * (x1 - mu1) * (x1 - mu2), 1e-10 + sigma1 * sigma2))
 
                 R = 1-tf.square(rho)
-                exponential = tf.exp(tf.divide(-Z, 2*R))
+                exponential = tf.exp(tf.divide(-Z, 1e-10 + 2*R))
                 density = tf.divide(exponential,
-                                    2 * np.pi * sigma1 * sigma2 * tf.sqrt(R))
+                                    1e-10 + 2 * np.pi * sigma1 * sigma2 * tf.sqrt(1e-4 + R))
 
                 return density
 
@@ -150,18 +154,20 @@ class HandwritingModel:
                                                         self.p_sigma1, self.p_sigma2,
                                                         self.p_rho)
 
+
             # Weight densities_by_gaussian by self.p_pi to get prob density for
             # each time step.
             weighted_densities = tf.mul(predicted_densities_by_gaussian, self.p_pi)
-            print(weighted_densities)
             density_by_timestep = tf.reduce_sum(weighted_densities, axis=2)
             print(density_by_timestep)
-            loss_due_to_gaussians = -tf.log(tf.maximum(density_by_timestep, 1e-20))
-            loss_due_to_bernoulli = -tf.log(self.p_bernoulli * eos_data +
+            loss_due_to_gaussians = -tf.log(1e-10 + density_by_timestep)
+            #loss_due_to_gaussians = tf.Print(loss_due_to_gaussians, [self.p_sigma1])
+            loss_due_to_bernoulli = -tf.log(1e-10 + self.p_bernoulli * eos_data +
                                             (1 - self.p_bernoulli) * (1-eos_data))
             loss_by_time_step = (loss_due_to_gaussians + loss_due_to_bernoulli)
             self.total_loss = tf.reduce_mean(loss_by_time_step)
             tf.summary.scalar('sample_loss', self.total_loss)
+            # self.total_loss = tf.check_numerics(tf.Print(self.total_loss, [self.total_loss]), "totalloss")
 
         with tf.name_scope("TRAIN"):
             self.lr_placeholder = tf.placeholder(tf.float32, name='learning_rate')
@@ -169,10 +175,11 @@ class HandwritingModel:
             self.global_step = tf.Variable( 0, name='global_step',
                                             trainable=False)
 
-
             tvars = tf.trainable_variables()
             self.grads =  tf.gradients(self.total_loss, tvars)
+
             self.grads = [tf.clip_by_value(g, -PARAMS.grad_clip, PARAMS.grad_clip) for g in self.grads]
+            # self.grads = [tf.Print(g, [g]) for g in self.grads]
             optimizer = tf.train.AdamOptimizer(self.lr_placeholder)
             self.reinforcement_train_op = optimizer.apply_gradients(zip(self.grads, tvars))
 

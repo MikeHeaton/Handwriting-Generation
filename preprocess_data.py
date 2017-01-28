@@ -20,11 +20,8 @@ def meanstd(strokesets):
     mean = np.mean(alldata, axis=0)
     std = np.std(alldata, axis=0)
 
-    print("MEAN: ", mean)
-    print("STD: ", std)
-    print("---TEST SCALED DATA---")
-    print("SCALEDSTDEV: ", np.std((alldata - mean) / std, axis=0))
-    print("SCALEDMEAN: ", np.mean((alldata-mean)/std, axis=0))
+    print("MEAN OFFSET: ", mean)
+    print("STD OFFSET: ", std)
     return mean, std
 
 if __name__ == "__main__":

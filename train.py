@@ -4,7 +4,7 @@ from config import PARAMS
 import tensorflow as tf
 from tqdm import tqdm
 import os
-
+import numpy as np
 
 with tf.Session() as sess:
     """
@@ -28,10 +28,10 @@ with tf.Session() as sess:
     # Set train/Dev Summary directories and writers
     print("Setting up summary writers...")
     train_summary_directory = './summaries/train'
-    train_summary_writer = tf.train.SummaryWriter(train_summary_directory, sess.graph)
+    train_summary_writer = tf.summary.FileWriter(train_summary_directory, sess.graph)
     print("Created train summary")
     dev_summary_directory = './summaries/dev'
-    dev_summary_writer = tf.train.SummaryWriter(dev_summary_directory, sess.graph)
+    dev_summary_writer = tf.summary.FileWriter(dev_summary_directory, sess.graph)
     print("Created dev summary.")
 
     """
@@ -47,30 +47,6 @@ with tf.Session() as sess:
                         training_model.initial_state_placeholder : init_state,
                         training_model.lr_placeholder: lr}
 
-        """print("points ->\n", minibatch.points_data)
-        print("next points ->\n", minibatch.next_points_data)
-        stop = input()
-
-        (bernoulli_param, pi, rho,
-        mu1, mu2,
-        sigma1, sigma2,
-        prev_state) = sess.run([training_model.p_bernoulli,
-                                training_model.p_pi,
-                                training_model.p_rho,
-                                training_model.p_mu1,
-                                training_model.p_mu2,
-                                training_model.p_sigma1,
-                                training_model.p_sigma2,
-                                training_model.last_state],
-                                feed_dict = feed_dict)
-        #print("bernoulli_param", bernoulli_param)
-        print("pi", pi)
-        #print("rho", rho)
-        #print("mu1 mu2", mu1, mu2)
-        #print("sigma1 sigma2", sigma1, sigma2)
-        inp = input()
-        #print("Prev state", prev_state)"""
-
         _, current_step, summary, loss, last_state, grads = sess.run([training_model.reinforcement_train_op,
                                             training_model.global_step,
                                             training_model.summaries,
@@ -78,9 +54,14 @@ with tf.Session() as sess:
                                             training_model.last_state,
                                             training_model.grads],
                                             feed_dict = feed_dict)
+
         print(grads)
         if current_step % PARAMS.record_every == 0:
             train_summary_writer.add_summary(summary, current_step)
+
+        nnans = sum([np.sum(np.isnan(g)) for g in grads])
+        if nnans > 0:
+            print("{} nans in step {}.".format(nnans, current_step))
 
         return last_state
 
@@ -106,7 +87,6 @@ with tf.Session() as sess:
                     saver.save(sess, PARAMS.weights_directory,
                                 global_step=training_model.global_step)
 
-
     """
     Run training!
     """
@@ -114,7 +94,7 @@ with tf.Session() as sess:
 
     for epoch in range(PARAMS.num_epochs):
         print("---Beginning epoch {}---".format(epoch))
-        print("Learning rate = {0:.4f}".format(lr))
+        print("Learning rate = {0:f}".format(lr))
 
         """FETCH TRAINING DATA in minibatch form"""
         """TODO: figure out the best way of doing this. (Too many samples
@@ -122,12 +102,12 @@ with tf.Session() as sess:
         print("Fetching training data...")
         training_data_generator = create_training_data.minibatch_generator_from_directory(
                                                         PARAMS.samples_directory
-                                                        #, max_strokesets=1
+                                                        , max_strokesets=PARAMS.restrict_samples
                                                         )
         print("Training...")
         run_epoch(training_data_generator, lr)
         lr = lr * PARAMS.learning_rate_decay
 
 """On the TODO list:
-Implement evaluation / test (what's the correct word for it?)
+Implement evaluation / test
 """
