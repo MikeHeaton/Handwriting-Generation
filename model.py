@@ -46,20 +46,20 @@ class HandwritingModel:
                                                     batch_size=batch_size,
                                                     dtype=tf.float32)
 
-            self.initial_state_placeholder = tf.placeholder_with_default(
-                            self.lstm_zero_state,
+            self.initial_state_placeholder = tf.placeholder(
+                            dtype=tf.float32,
                             shape=[batch_size, PARAMS.lstm_size*2*PARAMS.number_of_layers]
                             )
 
-            """
             # Dynamic_rnn implementation
             lstm_outputs, self.last_state = tf.nn.dynamic_rnn(
                             cell=stacked_lstm_cell,
                             inputs=self.input_placeholder,
                             initial_state=self.initial_state_placeholder,
                             dtype=tf.float32
-                            )"""
+                            )
 
+            """
             # Seq2seq implementation
             inputs = tf.split(1, sequence_len, self.input_placeholder)
             inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
@@ -68,20 +68,21 @@ class HandwritingModel:
                                                     inputs,
                                                     initial_state=self.initial_state_placeholder,
                                                     cell=stacked_lstm_cell,
-                                                    loop_function=None)
-            lstm_outputs = tf.reshape(tf.concat(1, lstm_outputs), [batch_size, sequence_len, PARAMS.lstm_size])
+                                                    loop_function=None)"""
+
+
+            #lstm_outputs = tf.reshape(tf.concat(1, lstm_outputs), [batch_size, sequence_len, PARAMS.lstm_size])
 
         with tf.name_scope("FC_LAYER"):
             W = tf.get_variable("W_out",
                             shape=(PARAMS.lstm_size, PARAMS.output_size),
-                            initializer=tf.contrib.layers.xavier_initializer()
+                            initializer= tf.contrib.layers.xavier_initializer()
                             )
 
             b = tf.get_variable("b_out",
                             shape=[PARAMS.output_size],
-                            initializer=tf.contrib.layers.xavier_initializer()
+                            initializer= tf.contrib.layers.xavier_initializer()
                             )
-
             lstm_outputs = tf.reshape(lstm_outputs, [-1, PARAMS.lstm_size])
             output_layer = tf.matmul(lstm_outputs, W)
             output_layer = tf.add(output_layer, b)
@@ -91,8 +92,9 @@ class HandwritingModel:
             """TODO: make this tensor multiplication into a pattern,
             to make it neater to reuse"""
 
-            network_output = tf.sigmoid(output_layer,
-                                            name="network_output")
+            network_output = output_layer
+            #network_output = tf.sigmoid(output_layer,
+            #                                 name="network_output")
 
         with tf.name_scope("LOSS"):
             # Read the actual points data for training and split.
@@ -109,7 +111,7 @@ class HandwritingModel:
 
             # Take first element as bernoulli param for end-of-stroke.
             phat_bernoulli = output_layer[:, :, 0]
-            self.p_bernoulli = tf.divide(1, 1 + tf.exp(phat_bernoulli))
+            self.p_bernoulli = tf.nn.sigmoid(phat_bernoulli)
 
             # Split remaining elements into parameters for the gaussians,
             # which are used to define the distribution mix for prediction.
@@ -151,8 +153,10 @@ class HandwritingModel:
             # Weight densities_by_gaussian by self.p_pi to get prob density for
             # each time step.
             weighted_densities = tf.mul(predicted_densities_by_gaussian, self.p_pi)
-            total_densities = tf.reduce_sum(weighted_densities, axis=2)
-            loss_due_to_gaussians = -tf.log(tf.maximum(total_densities, 1e-20))
+            print(weighted_densities)
+            density_by_timestep = tf.reduce_sum(weighted_densities, axis=2)
+            print(density_by_timestep)
+            loss_due_to_gaussians = -tf.log(tf.maximum(density_by_timestep, 1e-20))
             loss_due_to_bernoulli = -tf.log(self.p_bernoulli * eos_data +
                                             (1 - self.p_bernoulli) * (1-eos_data))
             loss_by_time_step = (loss_due_to_gaussians + loss_due_to_bernoulli)
@@ -160,20 +164,23 @@ class HandwritingModel:
             tf.summary.scalar('sample_loss', self.total_loss)
 
         with tf.name_scope("TRAIN"):
-            rein_optimizer = tf.train.RMSPropOptimizer(PARAMS.learning_rate)
+            self.lr_placeholder = tf.placeholder(tf.float32, name='learning_rate')
+            rein_optimizer = tf.train.RMSPropOptimizer(self.lr_placeholder)
             self.global_step = tf.Variable( 0, name='global_step',
                                             trainable=False)
-            self.reinforcement_train_op = rein_optimizer.minimize(
-                                            self.total_loss,
-                                            global_step=self.global_step)
-            self.summaries = tf.summary.merge_all()
 
-            """TODO: add training params: dropout?, grad clipping"""
+
+            tvars = tf.trainable_variables()
+            self.grads =  tf.gradients(self.total_loss, tvars)
+            self.grads = [tf.clip_by_value(g, -PARAMS.grad_clip, PARAMS.grad_clip) for g in self.grads]
+            optimizer = tf.train.AdamOptimizer(self.lr_placeholder)
+            self.reinforcement_train_op = optimizer.apply_gradients(zip(self.grads, tvars))
+
+            self.summaries = tf.summary.merge_all()
 
 if __name__ == "__main__":
     testmodel = HandwritingModel(generate_mode=True)
     with tf.Session() as sess:
         saver = tf.train.Saver()
         saver.restore(sess, tf.train.latest_checkpoint(PARAMS.weights_directory))
-        #sess.run(tf.initialize_all_variables())
         print(testmodel.generate_sample(sess))

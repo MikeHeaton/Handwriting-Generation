@@ -20,8 +20,20 @@ def generate_sample(length=500, use_saved=True):
             sess.run(tf.initialize_all_variables())
         print("Done.")
 
+        def sample_from_gaussian(mu1, mu2, sigma1, sigma2, rho):
+            # Sample from a 2d gaussian, given the parameters.
+            # The covariance matrix is  [s1*s1      s1*s2*rho   ]
+            #                           [s1*s2*rho  s2*s2       ]
+            # , taking rho to be as defined in
+            # http://www.itl.nist.gov/div898/handbook/pmc/section5/pmc542.htm
+            cov_matrix = np.array([[sigma1*sigma1,      sigma1*sigma2*rho],
+                                   [sigma1*sigma2*rho,  sigma2*sigma2    ]])
+            mean = np.array((mu1, mu2))
+            return np.random.multivariate_normal(mean, cov_matrix)
+
+        """
         def sample_from_gaussians(mu1, mu2, sigma1, sigma2, rho):
-            # Sample from some number of 2d gaussians, given their parameters.
+            # Sample from a 2d gaussians, given their parameters.
             # The covariance matrix is  [s1*s1      s1*s2*rho   ]
             #                           [s1*s2*rho  s2*s2       ]
             # , taking rho to be as defined in
@@ -31,7 +43,7 @@ def generate_sample(length=500, use_saved=True):
             mean = np.array((mu1, mu2))
             return np.array([np.random.multivariate_normal(np.squeeze(mean[:,:,:,i]),
                                                            np.squeeze(cov_matrix[:,:,:,:,i]))
-                             for i in range(PARAMS.num_gaussians)])
+                             for i in range(PARAMS.num_gaussians)])"""
 
         prev_point = np.array([[[0.0, 0.0, 1]]])
         prev_state = np.zeros([1, 2*PARAMS.lstm_size*PARAMS.number_of_layers])
@@ -39,7 +51,8 @@ def generate_sample(length=500, use_saved=True):
         print("Generating points...")
         all_offsets = []
         for _ in tqdm(range(length)):
-            feed_dict = {generating_model.input_placeholder        : prev_point,
+            # print(prev_state)
+            feed_dict = {generating_model.input_placeholder        : prev_point, #np.array([[[0.0, 0.0, 1]]]),
                          generating_model.initial_state_placeholder: prev_state}
 
             (bernoulli_param, pi, rho,
@@ -57,16 +70,20 @@ def generate_sample(length=500, use_saved=True):
             #print("bernoulli_param", bernoulli_param)
             print("pi", pi)
             #print("rho", rho)
-            #print("mu1 mu2", mu1, mu2)
+            # print("mu1 mu2", mu1.shape, mu2.shape)
             #print("sigma1 sigma2", sigma1, sigma2)
             #print("Prev state", prev_state)
-            gaussian_points = sample_from_gaussians(mu1, mu2,
-                                                    sigma1, sigma2, rho)
-            weighted_points = np.reshape(pi, [-1, 1]) * gaussian_points
-            predicted_offset = np.sum(weighted_points, axis=0)
-
             end_stroke = np.random.binomial(1, bernoulli_param, size=None)
 
+            pi = np.reshape(pi, [-1])
+            gaussian_choice = np.random.choice(list(range(len(pi))), p=pi)
+            predicted_offset = sample_from_gaussian(mu1[0,0, gaussian_choice],
+                                                    mu2[0,0, gaussian_choice],
+                                                    sigma1[0,0, gaussian_choice],
+                                                    sigma2[0,0, gaussian_choice],
+                                                    rho[0,0, gaussian_choice])
+            # weighted_points = np.reshape(pi, [-1, 1]) * gaussian_points
+            # predicted_offset = np.sum(weighted_points, axis=0)
             prev_point = np.reshape(np.append(predicted_offset, end_stroke), [1, 1, -1])
             all_offsets.append(np.squeeze(prev_point))
 
@@ -79,13 +96,13 @@ def strokeset_from_offsets(all_offsets):
     strokeset_strokes = []
     point=Point(0,0)
     stroke_points = [point]
-    for t in range(len(point_offsets)):
+    for t in range(len(all_offsets)):
         point = Point(point.x + all_offsets[t,0],
                       point.y + all_offsets[t,1])
         #print(point.x, point.y)
         stroke_points.append(point)
 
-        if all_offsets[t,2] == 1 or t == len(point_offsets) - 1:
+        if all_offsets[t,2] == 1 or t == len(all_offsets) - 1:
             # When the third arg is 1, it's the end of a stroke.
             # print(stroke_points)
             newstroke = Stroke(stroke_points)
@@ -97,10 +114,10 @@ def strokeset_from_offsets(all_offsets):
     return StrokeSet(strokeset_strokes)
 
 if __name__ == "__main__":
-    point_offsets = generate_sample(length=50)
+    all_offsets = generate_sample(length=50)
 
     print("Making strokeset")
-    strokeset = strokeset_from_offsets(point_offsets)
+    strokeset = strokeset_from_offsets(all_offsets)
 
     print("Plotting")
     strokeset.plot()

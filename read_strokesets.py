@@ -75,14 +75,30 @@ def load_xml_from_file(filename):
     tree = ET.parse(filename)
     return tree
 
-def load_strokeset_from_xml(xml_data):
+def xy(point, data_scale):
+    # Extracts point information from the xml object
+    # data_scale is either false, or a numpy array containing
+    # info about the data scaling to perform.
+    xraw, yraw = float(point.attrib['x']), float(point.attrib['y'])
+    if data_scale is False:
+        x, y = xraw, yraw
+    else:
+        xmean = data_scale[0]
+        ymean = data_scale[1]
+        xsdev = data_scale[2]
+        ysdev = data_scale[3]
+        x = (xraw - xmean) / xsdev
+        y = (yraw - ymean) / ysdev
+    return x, y
+
+def load_strokeset_from_xml(xml_data, data_scale=False):
     root = xml_data.getroot()
     strokeset_node = root[1]
 
     all_strokes = []
+
     for stroke_node in strokeset_node:
-        points = [Point(float(point.attrib['x'])*PARAMS.data_scale, float(point.attrib['y'])*PARAMS.data_scale)
-                    for point in stroke_node]
+        points = [Point(*xy(point, data_scale)) for point in stroke_node]
         stroke = Stroke(points)
         all_strokes.append(stroke)
     stroke_set = StrokeSet(all_strokes)
@@ -90,17 +106,21 @@ def load_strokeset_from_xml(xml_data):
 
     return stroke_set
 
-def all_strokesets_from_dir(rootdir, max_strokesets=None):
+def all_strokesets_from_dir(rootdir, max_strokesets=None, use_scale=True):
     all_strokesets = []
-
+    if use_scale:
+        data_scale = np.genfromtxt(PARAMS.samples_directory + "/" + PARAMS.data_scale_file)
+    else:
+        data_scale = False
     for subdir, dirs, files in os.walk(rootdir):
         for file in files:
-            xml_data = load_xml_from_file("{}/{}".format(subdir,file))
-            stroke_set = load_strokeset_from_xml(xml_data)
-            stroke_set.fname = file
-            all_strokesets.append(stroke_set)
-            if max_strokesets is not None and len(all_strokesets) >= max_strokesets:
-                break
+            if not (file.startswith('.')) and not file == PARAMS.data_scale_file:
+                xml_data = load_xml_from_file("{}/{}".format(subdir,file))
+                stroke_set = load_strokeset_from_xml(xml_data, data_scale=data_scale)
+                stroke_set.fname = file
+                all_strokesets.append(stroke_set)
+                if max_strokesets is not None and len(all_strokesets) >= max_strokesets:
+                    break
         if max_strokesets is not None and len(all_strokesets) >= max_strokesets:
             break
 
