@@ -5,11 +5,16 @@ import tensorflow as tf
 from tqdm import tqdm
 import os
 import numpy as np
+from tensorflow.python import debug as tf_debug
+
 
 with tf.Session() as sess:
     """
     Initialise objects and variables
     """
+
+    #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+    # sess.add_tensor_filter("has_inf_or_nan", lambda datum, tensor: np.any(tf.is_finite(tensor)))
 
     # Initialise model and related objects
     print("Initialising model...")
@@ -42,6 +47,12 @@ with tf.Session() as sess:
         if init_state is None:
             init_state = training_model.lstm_zero_state.eval()
         # print(minibatch.offsets_data,  minibatch.next_offsets_data)
+        print("-----RUN TRAIN STEP-----\nOFFSETS")
+        print(minibatch.offsets_data)
+        print(minibatch.offsets_data.mean(axis=1))
+        print("TARGETS")
+        print(minibatch.next_offsets_data)
+        print(minibatch.next_offsets_data.mean(axis=1))
         feed_dict = {training_model.input_placeholder : minibatch.offsets_data,
                         training_model.next_inputs_placeholder : minibatch.next_offsets_data,
                         training_model.initial_state_placeholder : init_state,
@@ -54,14 +65,15 @@ with tf.Session() as sess:
                                             training_model.last_state,
                                             training_model.grads],
                                             feed_dict = feed_dict)
-
-        print(grads)
+        print("GRADS")
+        print([g for g in grads])
         if current_step % PARAMS.record_every == 0:
             train_summary_writer.add_summary(summary, current_step)
 
         nnans = sum([np.sum(np.isnan(g)) for g in grads])
         if nnans > 0:
             print("{} nans in step {}.".format(nnans, current_step))
+            raise ValueError
 
         return last_state
 
@@ -74,8 +86,8 @@ with tf.Session() as sess:
             init_state = None
 
             for minibatch in file_group:
-                init_state = run_train_step(minibatch, lr, init_state)
-                #print(init_state)
+                _ = run_train_step(minibatch, lr, init_state)
+                # init_state = run_train_step(minibatch, lr, init_state)
 
                 current_step = tf.train.global_step(sess, training_model.global_step)
                 if current_step % PARAMS.eval_every == 0:

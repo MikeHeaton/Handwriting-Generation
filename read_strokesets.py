@@ -5,9 +5,12 @@ import matplotlib.pyplot as plt
 from config import PARAMS
 
 class StrokeSet(object):
-    def __init__(self, strokes, fname=""):
+    def __init__(self, strokes, data_scale=False, fname=""):
         self.strokes = strokes
         self.fname = fname
+        self.scale_data = data_scale is not False
+        if self.scale_data:
+            self.xmean, self.ymean, self.xsdev, self.ysdev = data_scale
 
     def __str__(self):
         return str([str(s) for s in self.strokes])
@@ -23,8 +26,12 @@ class StrokeSet(object):
         self._last_point = Point(0.0, 0.0)
 
         def append_offset(point, is_end_stroke):
-            self.all_points.append((point.x - self._last_point.x,
-                                    point.y - self._last_point.y,
+            offsetx = (point.x - self._last_point.x)
+            offsety = (point.y - self._last_point.y)
+            if self.scale_data:
+                offsetx = (offsetx - self.xmean) / self.xsdev
+                offsety = (offsety - self.ymean) / self.ysdev
+            self.all_points.append((offsetx, offsety,
                                     is_end_stroke))
             self._last_point = point
 
@@ -75,22 +82,6 @@ def load_xml_from_file(filename):
     tree = ET.parse(filename)
     return tree
 
-def xy(point, data_scale):
-    # Extracts point information from the xml object
-    # data_scale is either false, or a numpy array containing
-    # info about the data scaling to perform.
-    xraw, yraw = float(point.attrib['x']), float(point.attrib['y'])
-    if data_scale is False:
-        x, y = xraw, yraw
-    else:
-        xmean = data_scale[0]
-        ymean = data_scale[1]
-        xsdev = data_scale[2]
-        ysdev = data_scale[3]
-        x = (xraw - xmean) / xsdev
-        y = (yraw - ymean) / ysdev
-    return x, y
-
 def load_strokeset_from_xml(xml_data, data_scale=False):
     root = xml_data.getroot()
     strokeset_node = root[1]
@@ -98,10 +89,11 @@ def load_strokeset_from_xml(xml_data, data_scale=False):
     all_strokes = []
 
     for stroke_node in strokeset_node:
-        points = [Point(*xy(point, data_scale)) for point in stroke_node]
+        points = [Point(float(point.attrib['x']), float(point.attrib['y']))
+                    for point in stroke_node]
         stroke = Stroke(points)
         all_strokes.append(stroke)
-    stroke_set = StrokeSet(all_strokes)
+    stroke_set = StrokeSet(all_strokes, data_scale=data_scale)
     """TODO: make this neater with a comprehension"""
 
     return stroke_set

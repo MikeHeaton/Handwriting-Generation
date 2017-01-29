@@ -32,6 +32,7 @@ class HandwritingModel:
             lstm_cell = tf.nn.rnn_cell.LSTMCell(
                             PARAMS.lstm_size,
                             state_is_tuple=False,
+                            cell_clip=1,
                             initializer=tf.contrib.layers.xavier_initializer()
                             )
             stacked_lstm_cell = tf.nn.rnn_cell.MultiRNNCell(
@@ -80,8 +81,8 @@ class HandwritingModel:
                             )
 
             b = tf.get_variable("b_out",
-                            shape=[PARAMS.output_size],
-                            initializer= tf.contrib.layers.xavier_initializer()
+                            #shape=[PARAMS.output_size],
+                            initializer= tf.zeros_initializer(shape=[PARAMS.output_size])
                             )
 
             lstm_outputs = tf.reshape(lstm_outputs, [-1, PARAMS.lstm_size])
@@ -176,11 +177,16 @@ class HandwritingModel:
                                             trainable=False)
 
             tvars = tf.trainable_variables()
+            print(tvars)
             self.grads =  tf.gradients(self.total_loss, tvars)
 
+            """GRADIENT CLIPPING"""
             self.grads = [tf.clip_by_value(g, -PARAMS.grad_clip, PARAMS.grad_clip) for g in self.grads]
             # self.grads = [tf.Print(g, [g]) for g in self.grads]
-            optimizer = tf.train.AdamOptimizer(self.lr_placeholder)
+
+            #optimizer = tf.train.AdamOptimizer(self.lr_placeholder)
+            optimizer = tf.train.RMSPropOptimizer(self.lr_placeholder)
+
             self.reinforcement_train_op = optimizer.apply_gradients(zip(self.grads, tvars))
 
             self.summaries = tf.summary.merge_all()

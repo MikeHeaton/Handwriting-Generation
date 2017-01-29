@@ -22,6 +22,10 @@ def meanstd(strokesets):
 
     print("MEAN OFFSET: ", mean)
     print("STD OFFSET: ", std)
+
+    offsetdata = (alldata - mean) / std
+    #print("NEWMEAN ", np.mean(offsetdata, axis=0))
+    #print("NEWSTD ",np.std(offsetdata, axis=0))
     return mean, std
 
 if __name__ == "__main__":
