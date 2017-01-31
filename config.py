@@ -7,7 +7,7 @@ import numpy as np
 
 class Params():
     # --- Data reading params ---
-    samples_directory = "./small_training_data"
+    samples_directory = "./training_data"
     data_scale_file = "data_scale_params"
 
     # --- Neural Network params ------
@@ -24,13 +24,13 @@ class Params():
     # --- Model training params ------
 
     weights_directory = "./network_weights/"
-    batch_size = 1
+    batch_size = 32
 
-    learning_rate_init = 5e-5
+    learning_rate_init = 5e-3
     learning_rate_decay = 0.98
 
-    num_epochs = 200
-    restrict_samples = 100
+    num_epochs = 2000
+    restrict_samples = None
     use_saved = False
     eval_every = 100
     record_every = 10

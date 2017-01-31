@@ -1,12 +1,3 @@
-"""
-model = tensorflow model
-
-training routine:
-    init model with params either random init or read from disk
-    load all files from directory
-    train on each one in model
-    save the parameters down to disk
-"""
 
 from config import PARAMS
 import tensorflow as tf
@@ -60,20 +51,6 @@ class HandwritingModel:
                             dtype=tf.float32
                             )
 
-            """
-            # Seq2seq implementation
-            inputs = tf.split(1, sequence_len, self.input_placeholder)
-            inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
-
-            lstm_outputs, self.last_state = tf.nn.seq2seq.rnn_decoder(
-                                                    inputs,
-                                                    initial_state=self.initial_state_placeholder,
-                                                    cell=stacked_lstm_cell,
-                                                    loop_function=None)"""
-
-
-            #lstm_outputs = tf.reshape(tf.concat(1, lstm_outputs), [batch_size, sequence_len, PARAMS.lstm_size])
-
         with tf.name_scope("FC_LAYER"):
             W = tf.get_variable("W_out",
                             shape=(PARAMS.lstm_size, PARAMS.output_size),
@@ -99,35 +76,44 @@ class HandwritingModel:
             network_output = output_layer
 
         with tf.name_scope("LOSS"):
-            # Read the actual points data for training and split.
+            # next_inputs_placeholder contains the correct predicted point
+            # from the training data. Split it into [x1, x2, eos] tensors.
+
+            """TODO: move placeholders to input layer. Be careful it doesn't
+            mess up the already trained weights. (?)"""
             self.next_inputs_placeholder = tf.placeholder(tf.float32,
                                         shape=( batch_size,
                                                 sequence_len,
                                                 3))
-            # > Copy the input data num_gaussians times, so that we can calculate
-            #   frequency densities for every gaussian at once.
+            x1_data, x2_data, eos_data = (tf.squeeze(x, axis=2) for x in
+                                          tf.split(2, 3, self.next_inputs_placeholder))
 
-            x1_data, x2_data, eos_data = (tf.squeeze(x, axis=2) for x in tf.split(2, 3, self.next_inputs_placeholder))
+            # Frequency density of predicted points is compared to each
+            # gaussian in the mix individually.
+            # Easiest way to do this is to copy the input data
+            # num_gaussians times, so that we can calculate frequency
+            # densities for every gaussian at once.
             x1_data, x2_data = [tf.stack([x] * PARAMS.num_gaussians,
                                       axis=2) for x in [x1_data, x2_data]]
 
-            # Take first element as bernoulli param for end-of-stroke.
-            phat_bernoulli = output_layer[:, :, 0]
+            # ___PROCESS THE OUTPUT_LAYER INTO THE GAUSSIAN MIXTURE___
+
+            # > Take first element as bernoulli param for end-of-stroke.
+            phat_bernoulli   = output_layer[:, :, 0]
             self.p_bernoulli = tf.nn.sigmoid(phat_bernoulli)
 
-            # Split remaining elements into parameters for the gaussians,
-            # which are used to define the distribution mix for prediction.
+            # > Split remaining elements into parameters for the gaussians.
             predicted_gaussian_params = tf.reshape(network_output[:, :, 1:],
                                                     [batch_size,
                                                      sequence_len,
                                                      PARAMS.num_gaussians,
                                                      6])
+            (phat_pi, phat_mu1, phat_mu2,
+            phat_sigma1, phat_sigma2,
+            phat_rho)               = (tf.squeeze(x, axis=3) for x in
+                                    tf.split(3, 6, predicted_gaussian_params))
 
-            #predicted_gaussian_params = tf.check_numerics(predicted_gaussian_params, "predicted_gaussian_params", name=None)
-
-            phat_pi, phat_mu1, phat_mu2, phat_sigma1, phat_sigma2, phat_rho = (tf.squeeze(x, axis=3) for x in tf.split(3, 6, predicted_gaussian_params))
-
-            # Transform the phat (p-hat) parameters into proper distribution
+            # > Transform the phat (p-hat) parameters into proper distribution
             # parameters, by normalising them as described in
             # https://arxiv.org/pdf/1308.0850v5.pdf page 20.
             self.p_pi = tf.nn.softmax(1e-10 + phat_pi, name="self.p_pi")
@@ -137,38 +123,54 @@ class HandwritingModel:
             self.p_sigma2 = tf.exp(phat_sigma2)
             self.p_rho = tf.tanh(1e-10 + phat_rho)
 
+            def density_2d_gaussian(x1, x2, mu1, mu2, s1, s2, rho):
+              norm1 = tf.sub(x1, mu1)
+              norm2 = tf.sub(x2, mu2)
+              s1s2 = tf.mul(s1, s2)
+              z = tf.square(tf.div(norm1, s1))+tf.square(tf.div(norm2, s2))-2*tf.div(tf.mul(rho, tf.mul(norm1, norm2)), s1s2)
+              negRho = 1-tf.square(rho)
+              result = tf.exp(tf.div(-z,2*negRho))
+              denom = 2*np.pi*tf.mul(s1s2, tf.sqrt(negRho))
+              result = tf.div(result, denom)
+              return result
 
-            def density_2d_gaussian(x1, x2, mu1, mu2, sigma1, sigma2, rho):
-                Z = (tf.divide(tf.square(x1 - mu1), 1e-10 + tf.square(sigma1)) +
-                    tf.divide(tf.square(x2 - mu2), 1e-10 + tf.square(sigma2)) -
-                    tf.divide(2 * rho * (x1 - mu1) * (x1 - mu2), 1e-10 + sigma1 * sigma2))
+            # ___CALCULATE LOSS:
+            #       > DENSITY IN THE CALCULATED GAUSSIAN MIX
+            #       OF THE ACTUAL NEXT POINT
+            #       > PROBABILITY OF END_OF_STROKE CHOOSING THE ACTUAL
+            #       EOS VALUE FOR THE NEXT POINT
+            #    (TAKE NEGATIVE LOG OF BOTH TO MAKE A MINIMISABLE LOSS)___
 
-                R = 1-tf.square(rho)
-                exponential = tf.exp(tf.divide(-Z, 1e-10 + 2*R))
-                density = tf.divide(exponential,
-                                    1e-10 + 2 * np.pi * sigma1 * sigma2 * tf.sqrt(1e-4 + R))
 
-                return density
-
-            predicted_densities_by_gaussian = density_2d_gaussian(x1_data, x2_data,
+            # Positional loss:
+            # Get the density of the actual next point in each gaussian,
+            # then weight them by self.p_pi to get the weighted density.
+            predicted_densities_per_gaussian = density_2d_gaussian(x1_data, x2_data,
                                                         self.p_mu1, self.p_mu2,
                                                         self.p_sigma1, self.p_sigma2,
                                                         self.p_rho)
-
-
-            # Weight densities_by_gaussian by self.p_pi to get prob density for
-            # each time step.
-            weighted_densities = tf.mul(predicted_densities_by_gaussian, self.p_pi)
+            weighted_densities = tf.mul(predicted_densities_per_gaussian, self.p_pi)
             density_by_timestep = tf.reduce_sum(weighted_densities, axis=2)
-            print(density_by_timestep)
-            loss_due_to_gaussians = -tf.log(1e-10 + density_by_timestep)
-            #loss_due_to_gaussians = tf.Print(loss_due_to_gaussians, [self.p_sigma1])
-            loss_due_to_bernoulli = -tf.log(1e-10 + self.p_bernoulli * eos_data +
-                                            (1 - self.p_bernoulli) * (1-eos_data))
-            loss_by_time_step = (loss_due_to_gaussians + loss_due_to_bernoulli)
+
+            # EOS loss:
+            # standard cross-entropy loss.
+            bernoulli_density = (self.p_bernoulli       * eos_data +
+                                 (1 - self.p_bernoulli) * (1-eos_data))
+
+            # Make these into losses
+            loss_due_to_position = -tf.log(1e-10 + density_by_timestep)
+            loss_due_to_stroke_end = -tf.log(1e-10 + bernoulli_density)
+            loss_by_time_step = (loss_due_to_position + loss_due_to_stroke_end)
             self.total_loss = tf.reduce_mean(loss_by_time_step)
+
             tf.summary.scalar('sample_loss', self.total_loss)
-            # self.total_loss = tf.check_numerics(tf.Print(self.total_loss, [self.total_loss]), "totalloss")
+            tf.summary.scalar('bernoulli_density', tf.reduce_mean(bernoulli_density))
+            tf.summary.scalar('gaussian_density', tf.reduce_mean(density_by_timestep))
+            # pi_var is a measure of how much the pi parameter varies across
+            # time steps. This is an interesting measure of how well the network
+            # is learning, so log it.
+            pi_mean, pi_var = tf.nn.moments(self.p_pi, [1], name="pi_meanvar")
+            tf.summary.scalar('pi_var', tf.reduce_mean(pi_var))
 
         with tf.name_scope("TRAIN"):
             self.lr_placeholder = tf.placeholder(tf.float32, name='learning_rate')
@@ -176,19 +178,14 @@ class HandwritingModel:
             self.global_step = tf.Variable( 0, name='global_step',
                                             trainable=False)
 
+            # Calculate and clip the gradients.
             tvars = tf.trainable_variables()
-            print(tvars)
             self.grads =  tf.gradients(self.total_loss, tvars)
-
-            """GRADIENT CLIPPING"""
             self.grads = [tf.clip_by_value(g, -PARAMS.grad_clip, PARAMS.grad_clip) for g in self.grads]
-            # self.grads = [tf.Print(g, [g]) for g in self.grads]
 
-            #optimizer = tf.train.AdamOptimizer(self.lr_placeholder)
-            optimizer = tf.train.RMSPropOptimizer(self.lr_placeholder)
-
-            self.reinforcement_train_op = optimizer.apply_gradients(zip(self.grads, tvars))
-
+            # Apply the gradients.
+            optimizer = tf.train.AdamOptimizer(self.lr_placeholder)
+            self.reinforcement_train_op = optimizer.apply_gradients(zip(self.grads, tvars), global_step=self.global_step)
             self.summaries = tf.summary.merge_all()
 
 if __name__ == "__main__":
@@ -196,4 +193,4 @@ if __name__ == "__main__":
     with tf.Session() as sess:
         saver = tf.train.Saver()
         saver.restore(sess, tf.train.latest_checkpoint(PARAMS.weights_directory))
-        print(testmodel.generate_sample(sess))
+    print("Model created and variables loaded OK.")
