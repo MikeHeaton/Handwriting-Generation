@@ -1,0 +1,7 @@
+# gitignore
+
+*.png
+*training_data*
+*network_weights*
+*.pyc
+*.local
