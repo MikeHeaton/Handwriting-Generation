@@ -27,3 +27,8 @@ Macbook local.
 ### To Generate (out of the box):
 * In config.py, point the weights_directory to "./example_weights_stage1/".
 * Running generate.py will then generate a sample of text to testplot.png.
+
+## Next steps
+* I'm currently working on implementing part II of the methodology, feeding character information
+to allow the network to learn what character it's writing. This will make the network able to write arbitrary text in realistic handwriting.
+* Watch this space.
