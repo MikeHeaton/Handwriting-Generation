@@ -3,10 +3,10 @@
 A Tensorflow implementation of Generating Sequences With Recurrent Neural Networks by Alex Graves,
 applied to the problem of generating realistic handwriting.
 
-Original paper: https://arxiv.org/pdf/1308.0850v5.pdf.
+Original paper: https://arxiv.org/pdf/1308.0850v5.pdf.</br>
 Data source: http://www.fki.inf.unibe.ch/databases/iam-on-line-handwriting-database/download-the-iam-on-line-handwriting-database
 
-Update 30/1/17: the basic generation network is working and trained. Sample weights are included in the /network_weights folder. Here are some examples, running generate.py will generate other examples:
+Update 30/1/17: the basic generation network is working and trained. Sample weights are included in the /example_weights_stage1 folder. Here are some examples, running generate.py will generate other examples:
 
 ![testplot_1](https://cloud.githubusercontent.com/assets/11911723/22485200/8c95be04-e7b9-11e6-957c-1070b900897f.png)
 ![testplot_2](https://cloud.githubusercontent.com/assets/11911723/22485245/c017a4fe-e7b9-11e6-8be3-a1ecbefd1f29.png)
@@ -24,6 +24,6 @@ samples directory, so that sample offsets can be normalised when training and ge
 * Run train.py to train. Training for stage 1 (without character differentiation) took ~18 hours on my
 Macbook local.
 
-### To Generate:
+### To Generate (out of the box):
 * In config.py, point the weights_directory to "./example_weights_stage1/".
-* Running generate.py should then generate a sample of text to testplot.png.
+* Running generate.py will then generate a sample of text to testplot.png.
