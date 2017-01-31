@@ -29,11 +29,11 @@ class Params():
     learning_rate_init = 5e-3
     learning_rate_decay = 0.98
 
-    num_epochs = 2000
+    num_epochs = 20
     restrict_samples = None
     use_saved = False
     eval_every = 100
-    record_every = 10
+    record_every = 100
     save_every = 100
 
 

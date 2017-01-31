@@ -16,6 +16,7 @@ def load_files(dir):
     return strokesets
 
 def meanstd(strokesets):
+    # Calculates the mean and standard deviation of all of a set of strokesets.
     alldata = np.concatenate([ss.to_numpy() for ss in strokesets], axis=0)[:,[0,1]]
     mean = np.mean(alldata, axis=0)
     std = np.std(alldata, axis=0)
@@ -24,12 +25,10 @@ def meanstd(strokesets):
     print("STD OFFSET: ", std)
 
     offsetdata = (alldata - mean) / std
-    #print("NEWMEAN ", np.mean(offsetdata, axis=0))
-    #print("NEWSTD ",np.std(offsetdata, axis=0))
     return mean, std
 
 if __name__ == "__main__":
     strokesets = load_files(PARAMS.samples_directory)
     mean, std = meanstd(strokesets)
-    np.savetxt(PARAMS.samples_directory + "/" + PARAMS.data_scale_file, np.concatenate((mean, std), axis=0))
+    np.savetxt(PARAMS.data_scale_file, np.concatenate((mean, std), axis=0))
     print(np.genfromtxt(PARAMS.samples_directory + "/" + PARAMS.data_scale_file))

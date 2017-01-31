@@ -49,11 +49,8 @@ class StrokeSet(object):
         ax.invert_yaxis()
         jet = plt.get_cmap('jet')
         for t, stroke in enumerate(self.strokes):
-            # print([(s.x, s.y) for s in stroke.points])
             coordinates = [p.coordinates() for p in stroke.points]
             x_points, y_points = zip(*coordinates)
-            #print(x_points, y_points)
-            #ax.scatter(x_points, y_points, s=1, c=jet(100*t % 256), lw=0)
             ax.plot(x_points, y_points,lw=1, c='k') #,c=jet(100*t % 256)
         fig.savefig('testplot.png')
         """TODO: clean this up. Put 'plot' methods in the strokes?"""
@@ -101,7 +98,7 @@ def load_strokeset_from_xml(xml_data, data_scale=False):
 def all_strokesets_from_dir(rootdir, max_strokesets=None, use_scale=True):
     all_strokesets = []
     if use_scale:
-        data_scale = np.genfromtxt(PARAMS.samples_directory + "/" + PARAMS.data_scale_file)
+        data_scale = np.genfromtxt(PARAMS.data_scale_file)
     else:
         data_scale = False
 

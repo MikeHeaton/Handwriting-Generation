@@ -105,11 +105,9 @@ def strokeset_from_offsets(all_offsets):
         if all_offsets[t,2] == 1 or t == len(all_offsets) - 1:
             # When the third arg is 1, it's the end of a stroke.
             newstroke = Stroke(stroke_points)
-            # print(newstroke.points)
             strokeset_strokes.append(Stroke(stroke_points))
             stroke_points = []
     newstrokeset = StrokeSet(strokeset_strokes)
-    #print(newstrokeset.strokes)
     return StrokeSet(strokeset_strokes)
 
 if __name__ == "__main__":
