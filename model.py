@@ -124,17 +124,17 @@ class HandwritingModel:
             self.p_rho = tf.tanh(1e-10 + phat_rho)
 
             def density_2d_gaussian(x1, x2, mu1, mu2, s1, s2, rho):
-              z = (tf.square(tf.div(tf.sub(x1, mu1), s1)) +
+                z = (tf.square(tf.div(tf.sub(x1, mu1), s1)) +
                    tf.square(tf.div(tf.sub(x2, mu2), s2)) -
                    2 * tf.div(tf.mul(rho,
                                      tf.mul(tf.sub(x1, mu1),
                                             tf.sub(x2, mu2))),
                               tf.mul(s1, s2)))
-              R = 1-tf.square(rho)
-              numerator = tf.exp(tf.div(-z,2*R))
-              normfactor = 2*np.pi*tf.mul(tf.mul(s1, s2), tf.sqrt(R))
-              result = tf.div(numerator, normfactor)
-              return result
+                R = 1-tf.square(rho)
+                numerator = tf.exp(tf.div(-z,2*R))
+                normfactor = 2*np.pi*tf.mul(tf.mul(s1, s2), tf.sqrt(R))
+                result = tf.div(numerator, normfactor)
+                return result
 
             # ___CALCULATE LOSS:
             #       > DENSITY IN THE CALCULATED GAUSSIAN MIX
