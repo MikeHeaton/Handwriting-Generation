@@ -11,7 +11,7 @@ class Params():
     data_scale_file = "data_scale_params"
 
     # --- Neural Network params ------
-    lstm_size = 400
+    lstm_size = 256 # (was 400 for saved weights)
     number_of_layers = 3
     sequence_len = 400
 
@@ -20,6 +20,7 @@ class Params():
     dropout_keep_prob = 0.8
 
     grad_clip = 10
+
 
     # --- Model training params ------
 
@@ -35,6 +36,13 @@ class Params():
     eval_every = 100
     record_every = 100
     save_every = 100
+
+    # --- Window params ------- #
+
+    window_gaussians = 10
+    num_characters = 52
+    max_char_len = 100
+
 
 
 

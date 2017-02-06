@@ -58,7 +58,6 @@ class HandwritingModel:
                             )
 
             b = tf.get_variable("b_out",
-                            #shape=[PARAMS.output_size],
                             initializer= tf.zeros_initializer(shape=[PARAMS.output_size])
                             )
 
