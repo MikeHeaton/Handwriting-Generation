@@ -179,6 +179,7 @@ def make_l1_and_window_layers(cell,
 
 
 if __name__ == "__main__":
+    """Run test with dummy tensors"""
     sequence_len = PARAMS.sequence_len
     input_placeholder = tf.placeholder(tf.float32,
                                 shape=( PARAMS.batch_size,
@@ -199,6 +200,7 @@ if __name__ == "__main__":
                     cell_clip=1,
                     initializer=tf.contrib.layers.xavier_initializer()
                     )
+
     layeroutput = make_l1_and_window_layers(lstm_cell,
                                         input_placeholder,
                                         sequence_lengths_placeholder,

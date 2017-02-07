@@ -1,7 +1,7 @@
 # gitignore
 
 *.png
-*training_data*
+*(?<!create_)training_data*
 *network_weights*
 *.pyc
 *.local
