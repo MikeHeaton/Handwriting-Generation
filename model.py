@@ -17,12 +17,12 @@ class HandwritingModel:
         with tf.name_scope("PLACEHOLDERS"):
             self.input_placeholder = tf.placeholder(tf.float32,
                                         shape=( batch_size,
-                                                sequence_len,
+                                                None,
                                                 3))
 
             self.next_inputs_placeholder = tf.placeholder(tf.float32,
                                         shape=( batch_size,
-                                                sequence_len,
+                                                None,
                                                 3))
 
             self.inputs_length_placeholder = tf.placeholder(tf.int32,
@@ -129,8 +129,8 @@ class HandwritingModel:
             output_layer = tf.matmul(lstm_outputs, W)
             output_layer = tf.add(output_layer, b)
             output_layer = tf.reshape(output_layer, [batch_size,
-                                                     sequence_len,
-                                                     -1])
+                                                     -1,
+                                                     PARAMS.output_size])
 
             """TODO: make this tensor multiplication into a pattern,
             to make it neater to reuse"""
@@ -164,7 +164,8 @@ class HandwritingModel:
             # > Split remaining elements into parameters for the gaussians.
             predicted_gaussian_params = tf.reshape(network_output[:, :, 1:],
                                                     [batch_size,
-                                                     sequence_len,
+                                                     -1,
+                                                     #sequence_len,
                                                      PARAMS.num_gaussians,
                                                      6])
             (phat_pi, phat_mu1, phat_mu2,

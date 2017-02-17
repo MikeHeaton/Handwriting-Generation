@@ -37,7 +37,7 @@ class Params():
     restrict_samples = None
     use_saved = False
     eval_every = 100
-    record_every = 100
+    record_every = 10
     save_every = 100
 
     # --- Window params ------- #

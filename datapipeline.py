@@ -82,6 +82,34 @@ def generate_samples_from_dir(rootdir):
                     sample = Sample(strokeset, textline, charset_name, linenum)
                     yield sample
 
+def generate_long_minibatch_from_samples(list_of_samples):
+    character_sequences = np.zeros([len(list_of_samples), PARAMS.max_char_len])
+    for i in range(len(list_of_samples)):
+        character_sequences[i, 0: len(list_of_samples[i].text)] = list_of_samples[i].text
+
+    character_lengths = np.array([len(list_of_samples[i].text)
+                                  for i in range(len(list_of_samples))])
+
+    points_generators = [s.strokeset.points_generator(length=10000)
+                            for s in list_of_samples]
+
+    sequences = []
+    sequence_lengths = []
+
+    for n, sample in enumerate(points_generators):
+        next_points = next(sample)
+        sequences.append(next_points)
+        sequence_lengths.append(len(next_points) - 1)
+
+    offsets_array = np.zeros([len(list_of_samples), max(sequence_lengths) + 1, 3])
+
+    for n, points in enumerate(sequences):
+        offsets_array[n, 0: len(points), :] = points
+
+    yield Minibatch(offsets_array,    character_sequences,
+                    sequence_lengths, character_lengths)
+
+
 
 def generate_minibatches_from_samples(list_of_samples):
     # Takes in a list of samples
@@ -138,7 +166,7 @@ def generate_minibatches_from_dir(directory):
         try:
             list_of_samples = [next(samples_generator)
                                for _ in range(PARAMS.batch_size)]
-            yield generate_minibatches_from_samples(list_of_samples)
+            yield generate_long_minibatch_from_samples(list_of_samples)
         except StopIteration:
             break
 

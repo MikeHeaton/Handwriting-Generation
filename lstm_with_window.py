@@ -123,7 +123,7 @@ def make_l1_and_window_layers(cell,
 
     # Get batch_size
     batch_size = input_placeholder.get_shape()[1].value
-    inputs_ta = tf.TensorArray(dtype=tf.float32, size=PARAMS.sequence_len)
+    inputs_ta = tf.TensorArray(dtype=tf.float32, size=1, dynamic_size=True)#PARAMS.sequence_len)
     inputs_ta = inputs_ta.unpack(input_placeholder)
 
     def window_loop_fn(time, cell_output, cell_state, loop_state):
@@ -210,6 +210,7 @@ def make_l1_and_window_layers(cell,
     outputs_ta, final_state, final_loop_state = raw_rnn(cell, window_loop_fn)
     print("raw_rnn called success")
     outputs = outputs_ta.pack()
+
     if not time_major:
         outputs = tf.transpose(outputs,
                                 perm=[1, 0, 2])

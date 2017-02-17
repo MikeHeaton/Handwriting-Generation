@@ -43,6 +43,8 @@ with tf.Session() as sess:
                             "postwindow_init_state": training_model.postwindow_lstm_zero_state,
                             "kappa_init_state": training_model.kappa_zero_state}
 
+        print(minibatch.inputs_data.shape)
+        print(minibatch.outputs_data.shape)
         feed_dict = {
         training_model.input_placeholder: minibatch.inputs_data,
         training_model.next_inputs_placeholder: minibatch.outputs_data,
