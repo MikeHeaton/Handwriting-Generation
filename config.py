@@ -4,15 +4,18 @@
 # in header; then access parameters as
 # PARAMS.foo.
 import numpy as np
+import os
+from collections import defaultdict
 
 class Params():
     # --- Data reading params ---
-    samples_directory = "./training_data"
+    samples_directory = os.path.abspath("training_data")
+
     data_scale_file = "data_scale_params"
 
     # --- Neural Network params ------
     lstm_size = 256 # (was 400 for saved weights)
-    number_of_layers = 3
+    number_of_postwindow_layers = 1
     sequence_len = 400
 
     num_gaussians = 20
@@ -40,15 +43,18 @@ class Params():
     # --- Window params ------- #
 
     window_gaussians = 10
-    num_characters = 52
-    max_char_len = 100
+    max_char_len = 64
 
+    int_to_char = {**{0: '.', 1: ' '},
+                    **{i - 63: chr(i) for i in range(65,91)},
+                    **{i - 69: chr(i) for i in range(97,123)}}
+    #int_to_char = defaultdict(int, int_to_char)
 
-
-
-
-
-
+    char_to_int = defaultdict(int, {c: i for i, c in int_to_char.items()})
+    num_characters = len(int_to_char)
 
 
 PARAMS = Params()
+
+"""NOTES: consider cell_clip on the LSTM cell, it was used in StepI and worked.
+Currently off because idk if it's necessary."""

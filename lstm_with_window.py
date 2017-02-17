@@ -9,8 +9,11 @@ def make_l1_and_window_layers(cell,
                                 charlist_placeholder,
                                 charlist_lengths_placeholder,
                                 layer1_initial_state_placeholder,
+                                kappa_initial_placeholder,
                                 time_major=False):
     """
+    # cell is the LSTM cell object. Required to create the zero-state at t=0.
+
     # input_placeholder is the location data for the sample.
     #   shape = [PARAMS.batch_size, PARAMS.sequence_len, 3]
 
@@ -27,8 +30,9 @@ def make_l1_and_window_layers(cell,
     # layer1_state_placeholder is the initial states placeholder for the LSTM cell.
     #    shape = [PARAMS.batch_size, PARAMS.lstm_size]
 
-    # cell is the LSTM cell object. Required to create the zero-state at t=0.
-    # batch_size is an int. Derp.
+    # kappa_initial_placeholder is the initial values of kappa used to
+    # initialise the window location.
+        shape = [PARAMS.batch_size, PARAMS.window_gaussians]
     """
 
     def transform_h1_to_p(cell_output):
@@ -63,6 +67,9 @@ def make_l1_and_window_layers(cell,
         # https://arxiv.org/pdf/1308.0850v5.pdf page 26.
         alpha = tf.exp(alphahat)
         beta = tf.exp(betahat)
+
+        print("Adding to make kappa:")
+        print(current_loop_state, tf.exp(kappahat))
         kappa = tf.add(current_loop_state, tf.exp(kappahat))
         # Each param is now of shape [batch_size, PARAMS.window_gaussians].
 
@@ -122,54 +129,86 @@ def make_l1_and_window_layers(cell,
     def window_loop_fn(time, cell_output, cell_state, loop_state):
 
         if cell_output is None:
+            samples_finished = (time >= sequence_lengths_placeholder)
+
+            next_offset_input = inputs_ta.read(time)
+            opinion_vectors = tf.zeros([batch_size, PARAMS.num_characters])
+            next_input = tf.zeros([batch_size, 3 + PARAMS.num_characters])
+
+            #next_input = tf.concat(concat_dim=1,
+            #                      values=[next_offset_input, opinion_vectors])
+
             next_cell_state = layer1_initial_state_placeholder
-            kappa = tf.zeros([batch_size, PARAMS.window_gaussians])
+            emit_output = tf.zeros([PARAMS.num_characters+PARAMS.lstm_size])
+            loop_state = kappa_initial_placeholder
+
+            W_h1_p = tf.get_variable("W_h1_p",
+                            shape=(PARAMS.lstm_size, PARAMS.window_gaussians * 3),
+                            initializer= tf.contrib.layers.xavier_initializer()
+                            )
+            b_p = tf.get_variable("b_p",
+                            initializer= tf.zeros_initializer(shape=[PARAMS.window_gaussians * 3])
+                            )
 
             """TODO: better initialization for the opinionvector would be
             the first character of each sample. Does that make a difference?"""
-            opinion_vectors = tf.zeros([batch_size, PARAMS.num_characters])
-            cell_output = tf.zeros([batch_size, PARAMS.lstm_size])
-            print(cell_output   )
-            emit_output = tf.zeros([PARAMS.num_characters+PARAMS.lstm_size])
 
+            return samples_finished, next_input, next_cell_state, emit_output, loop_state
         else:
             next_cell_state = cell_state
+            tf.get_variable_scope().reuse_variables()
 
-            with tf.name_scope("WINDOW_LAYER"):
-                p_layer_inputs = transform_h1_to_p(cell_output)
-                alpha, beta, kappa = find_parameters(p_layer_inputs, loop_state)
+            #with tf.name_scope("WINDOW_LAYER"):
 
-                opinion_vectors = make_opinionvector(alpha, beta, kappa,
-                                                charlist_placeholder,
-                                                charlist_lengths_placeholder)
+            W_h1_p = tf.get_variable("W_h1_p",
+                            shape=(PARAMS.lstm_size, PARAMS.window_gaussians * 3),
+                            initializer= tf.contrib.layers.xavier_initializer()
+                            )
+            b_p = tf.get_variable("b_p",
+                            initializer= tf.zeros_initializer(shape=[PARAMS.window_gaussians * 3])
+                            )
 
-                # lstm_2 is fed the output from layer 1 and the opinion vector.
-                """TODO: add skip connection by joining the current output."""
-                emit_output = tf.concat(concat_dim=1,
-                                      values=[cell_output,
-                                              opinion_vectors])
-                emit_output = tf.squeeze(emit_output)
+            # Get window parameters from the first output layer via matrix
+            # multiplication. This is only for one time step, so
+            # unlike in the model file there's no need to reshape cell_output.
+            window_parameters = tf.matmul(cell_output, W_h1_p)
+            p_layer_inputs = tf.add(window_parameters, b_p)
 
-        with tf.name_scope("LOOP_FN"):
+            #p_layer_inputs = transform_h1_to_p(cell_output)
+            alpha, beta, kappa = find_parameters(p_layer_inputs, loop_state)
+
+            opinion_vectors = make_opinionvector(alpha, beta, kappa,
+                                            charlist_placeholder,
+                                            charlist_lengths_placeholder)
+
+            # lstm_2 is fed the output from layer 1 and the opinion vector.
+            """TODO: add skip connection by joining the current output."""
+            emit_output = tf.concat(concat_dim=1,
+                                  values=[cell_output,
+                                          opinion_vectors])
+            #emit_output = tf.squeeze(emit_output)
+
+            #with tf.name_scope("LOOP_FN"):
 
             samples_finished = (time >= sequence_lengths_placeholder)
             loop_state = kappa
 
             # Concat the actual input with the opinionvector to get the input
             # to the RNN for time t+1.
-            next_offset_input = inputs_ta.read(time)
+            next_offset_input = inputs_ta.read(time-1)
             next_input = tf.concat(concat_dim=1,
                                   values=[next_offset_input, opinion_vectors])
 
-        print("samples_finished", samples_finished)
-        print("next_input", next_input)
-        print("next_cell_state", next_cell_state)
-        print("emit_output", emit_output)
-        print("loop_state", loop_state)
+            print("samples_finished", samples_finished)
+            print("next_input", next_input)
+            print("next_cell_state", next_cell_state)
+            print("emit_output", emit_output)
+            print("loop_state", loop_state)
 
-        return samples_finished, next_input, next_cell_state, emit_output, loop_state
+            return samples_finished, next_input, next_cell_state, emit_output, loop_state
 
     outputs_ta, final_state, final_loop_state = raw_rnn(cell, window_loop_fn)
+    print("raw_rnn called success")
     outputs = outputs_ta.pack()
     if not time_major:
         outputs = tf.transpose(outputs,
@@ -192,6 +231,7 @@ if __name__ == "__main__":
                                         PARAMS.num_characters))
     charlist_lengths_placeholder = tf.placeholder(tf.int32,
                                 shape=( PARAMS.batch_size,))
+
     layer1_state_placeholder =  tf.placeholder(tf.float32,
                                 shape=( PARAMS.batch_size, PARAMS.lstm_size * 2))
     lstm_cell = tf.nn.rnn_cell.LSTMCell(
@@ -201,10 +241,13 @@ if __name__ == "__main__":
                     initializer=tf.contrib.layers.xavier_initializer()
                     )
 
+    kappa_initial_placeholder = tf.zeros([PARAMS.batch_size, PARAMS.window_gaussians])
+
     layeroutput = make_l1_and_window_layers(lstm_cell,
                                         input_placeholder,
                                         sequence_lengths_placeholder,
                                         charlist_placeholder,
                                         charlist_lengths_placeholder,
                                         layer1_state_placeholder,
+                                        kappa_initial_placeholder,
                                         time_major=False)

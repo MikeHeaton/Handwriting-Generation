@@ -1,10 +1,14 @@
 import os
-from read_strokesets import load_xml_from_file
+import read_strokesets
 from config import PARAMS
 
 class Text:
     def __init__(self, textdict):
         self.lines = textdict
+        self.coded_lines = {line: [PARAMS.char_to_int[c] for c in textdict[line]]
+                            for line in textdict.keys()}
+
+    """TODO: Clean the text re " . " and etc."""
 
 def load_textdict_from_xml(xml_data, data_scale=False):
     root = xml_data.getroot()
@@ -23,8 +27,9 @@ def text_from_file(filepath):
 
     # Find the "CSR:" header, and read everything from two lines below it,
     # through to the text end (one line before file end).
+    # Filter out blank lines.
     CSR_location = content.index("CSR:")
-    textlines = content[CSR_location + 2:]
+    textlines = [c for c in content[CSR_location + 2:] if len(c) > 0]
 
     textdict = {i+1: c for i, c in enumerate(textlines)}
 
@@ -34,7 +39,7 @@ def text_from_file(filepath):
     return Text(textdict)
 
 if __name__ == "__main__":
-    charpath = os.path.join(PARAMS.samples_directory, "character_data", "a01", "a01-001", "a01-001w.txt")
-    strokepath = os.path.join(PARAMS.samples_directory, "strokes_data", "a01", "a01-001", "a01-001w-01.xml")
-    filepath = os.path.join(PARAMS.samples_directory, "character_data", "a01", "a01-001", "a01-001w.txt")
-    print(text_from_file(charpath).text)
+    charpath = os.path.join(PARAMS.samples_directory, "character_data", "a02", "a02-057", "a02-057.txt")
+    strokepath = os.path.join(PARAMS.samples_directory, "strokes_data", "a02", "a02-057", "a02-057-08.xml")
+    print(text_from_file(charpath).lines)
+    read_strokesets.strokeset_from_file(strokepath).plot()

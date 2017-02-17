@@ -2,6 +2,7 @@
 from config import PARAMS
 import tensorflow as tf
 import numpy as np
+import lstm_with_window
 
 class HandwritingModel:
     def __init__(self, generate_mode=False):
@@ -13,41 +14,103 @@ class HandwritingModel:
             batch_size = PARAMS.batch_size
             sequence_len = PARAMS.sequence_len
 
-        with tf.name_scope("INPUT"):
+        with tf.name_scope("PLACEHOLDERS"):
             self.input_placeholder = tf.placeholder(tf.float32,
                                         shape=( batch_size,
                                                 sequence_len,
                                                 3))
 
-        with tf.name_scope("LSTM_LAYERS"):
-            lstm_cell = tf.nn.rnn_cell.LSTMCell(
+            self.next_inputs_placeholder = tf.placeholder(tf.float32,
+                                        shape=( batch_size,
+                                                sequence_len,
+                                                3))
+
+            self.inputs_length_placeholder = tf.placeholder(tf.int32,
+                                        shape=( batch_size))
+
+            self.l1_initial_state_placeholder = tf.placeholder(tf.float32,
+                                shape=(batch_size,
+                                PARAMS.lstm_size * 2))
+
+            self.postwindow_initial_state_placeholder = tf.placeholder(tf.float32,
+                                shape=(batch_size,
+                                PARAMS.lstm_size * 2 * PARAMS.number_of_postwindow_layers))
+
+            self.kappa_initial_placeholder = tf.placeholder(tf.float32,
+                                shape=(batch_size,
+                                        PARAMS.window_gaussians))
+
+            self.lr_placeholder = tf.placeholder(tf.float32)
+
+            self.character_codes_placeholder = tf.placeholder(tf.int32,
+                                        shape=( batch_size,
+                                                PARAMS.max_char_len))
+
+            self.character_lengths_placeholder = tf.placeholder(tf.int32,
+                                        shape=( batch_size))
+
+
+            characters_1hot = tf.one_hot(self.character_codes_placeholder,
+                                depth=PARAMS.num_characters,
+                                on_value=1.0,
+                                off_value=0.0,
+                                dtype=tf.float32)
+
+        with tf.name_scope("LAYER_1_AND_WINDOW"):
+            lstm_cell_1 = tf.nn.rnn_cell.LSTMCell(
                             PARAMS.lstm_size,
                             state_is_tuple=False,
-                            cell_clip=1,
+                            #cell_clip=1,
                             initializer=tf.contrib.layers.xavier_initializer()
                             )
+
+            #self.lstm_1_zero_state = lstm_cell_1.zero_state(batch_size=batch_size,
+            #                                                dtype=tf.float32)
+            self.lstm_1_zero_state = np.zeros([batch_size, PARAMS.lstm_size *2])
+        (outputs,
+        self.final_l1_state,
+        self.final_kappa) = lstm_with_window.make_l1_and_window_layers(
+                                lstm_cell_1,
+                                self.input_placeholder,
+                                self.inputs_length_placeholder,
+                                characters_1hot,
+                                self.character_lengths_placeholder,
+                                self.l1_initial_state_placeholder,
+                                self.kappa_initial_placeholder,
+                                time_major=False)
+
+        self.kappa_zero_state = np.zeros([PARAMS.batch_size, PARAMS.window_gaussians])
+
+        with tf.name_scope("OTHER_LSTM_LAYERS"):
+            lstm_cell_2 = tf.nn.rnn_cell.LSTMCell(
+                            PARAMS.lstm_size,
+                            state_is_tuple=False,
+                            #cell_clip=1,
+                            initializer=tf.contrib.layers.xavier_initializer()
+                            )
+
             stacked_lstm_cell = tf.nn.rnn_cell.MultiRNNCell(
-                            [lstm_cell] * PARAMS.number_of_layers,
+                            [lstm_cell_2] * PARAMS.number_of_postwindow_layers,
                             state_is_tuple=False
                             )
 
             if (not self.generate_mode) and PARAMS.dropout_keep_prob < 1:
-                stacked_lstm_cell = tf.nn.rnn_cell.DropoutWrapper(stacked_lstm_cell, output_keep_prob = PARAMS.dropout_keep_prob)
+                stacked_lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
+                                    stacked_lstm_cell,
+                                    output_keep_prob = PARAMS.dropout_keep_prob)
 
-            self.lstm_zero_state = stacked_lstm_cell.zero_state(
+            self.postwindow_lstm_zero_state = np.zeros([batch_size, PARAMS.lstm_size *2])
+
+
+            """stacked_lstm_cell.zero_state(
                                                     batch_size=batch_size,
-                                                    dtype=tf.float32)
-
-            self.initial_state_placeholder = tf.placeholder(
-                            dtype=tf.float32,
-                            shape=[batch_size, PARAMS.lstm_size*2*PARAMS.number_of_layers]
-                            )
+                                                    dtype=tf.float32)"""
 
             # Dynamic_rnn implementation
-            lstm_outputs, self.last_state = tf.nn.dynamic_rnn(
+            lstm_outputs, self.last_postwindow_lstm_state = tf.nn.dynamic_rnn(
                             cell=stacked_lstm_cell,
-                            inputs=self.input_placeholder,
-                            initial_state=self.initial_state_placeholder,
+                            inputs=outputs,
+                            initial_state=self.postwindow_initial_state_placeholder,
                             dtype=tf.float32
                             )
 
@@ -60,7 +123,7 @@ class HandwritingModel:
             b = tf.get_variable("b_out",
                             initializer= tf.zeros_initializer(shape=[PARAMS.output_size])
                             )
-
+            print("LSTM OUTPUTS    ", lstm_outputs)
             lstm_outputs = tf.reshape(lstm_outputs, [-1, PARAMS.lstm_size])
 
             output_layer = tf.matmul(lstm_outputs, W)
@@ -80,10 +143,7 @@ class HandwritingModel:
 
             """TODO: move placeholders to input layer. Be careful it doesn't
             mess up the already trained weights. (?)"""
-            self.next_inputs_placeholder = tf.placeholder(tf.float32,
-                                        shape=( batch_size,
-                                                sequence_len,
-                                                3))
+
             x1_data, x2_data, eos_data = (tf.squeeze(x, axis=2) for x in
                                           tf.split(2, 3, self.next_inputs_placeholder))
 
@@ -174,7 +234,7 @@ class HandwritingModel:
             tf.summary.scalar('pi_var', tf.reduce_mean(pi_var))
 
         with tf.name_scope("TRAIN"):
-            self.lr_placeholder = tf.placeholder(tf.float32, name='learning_rate')
+
             rein_optimizer = tf.train.RMSPropOptimizer(self.lr_placeholder)
             self.global_step = tf.Variable( 0, name='global_step',
                                             trainable=False)
@@ -190,8 +250,8 @@ class HandwritingModel:
             self.summaries = tf.summary.merge_all()
 
 if __name__ == "__main__":
-    testmodel = HandwritingModel(generate_mode=True)
-    with tf.Session() as sess:
+    testmodel = HandwritingModel(generate_mode=False)
+    """with tf.Session() as sess:
         saver = tf.train.Saver()
         saver.restore(sess, tf.train.latest_checkpoint(PARAMS.weights_directory))
-    print("Model created and variables loaded OK.")
+    print("Model created and variables loaded OK.")"""

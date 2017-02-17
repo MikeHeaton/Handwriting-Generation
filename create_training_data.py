@@ -8,11 +8,14 @@ import preprocess_data
 class Sample():
     def __init__(self, offsets_data):
         # Create point & next_point lists from the input data.
+        # A sample contains
         self.offsets_data = offsets_data[:-1]
         self.next_offsets_data = offsets_data[1:]
 
 class Minibatch():
     def __init__(self, list_of_samples):
+        # A minibatch is designed to contain PARAMS.batch_size input feeds
+        # for the network.
         self.offsets_data = np.array([x.offsets_data for x in list_of_samples])
         self.next_offsets_data = np.array([x.next_offsets_data for x in list_of_samples])
 

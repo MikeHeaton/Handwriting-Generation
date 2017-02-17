@@ -1,5 +1,5 @@
 import model
-import create_training_data
+import datapipeline
 from config import PARAMS
 import tensorflow as tf
 from tqdm import tqdm
@@ -37,44 +37,53 @@ with tf.Session() as sess:
     Define the training and eval functions
     """
 
-    def run_train_step(minibatch, lr, init_state=None):
-        if init_state is None:
-            init_state = training_model.lstm_zero_state.eval()
+    def run_train_step(minibatch, lr, state_info=None):
+        if state_info is None:
+            state_info = {"l1_init_state": training_model.lstm_1_zero_state,
+                            "postwindow_init_state": training_model.postwindow_lstm_zero_state,
+                            "kappa_init_state": training_model.kappa_zero_state}
 
-        """print("-----RUN TRAIN STEP-----\nOFFSETS")
-        print(minibatch.offsets_data)
-        print(minibatch.offsets_data.mean(axis=1))
-        print("TARGETS")
-        print(minibatch.next_offsets_data)
-        print(minibatch.next_offsets_data.mean(axis=1))"""
+        feed_dict = {
+        training_model.input_placeholder: minibatch.inputs_data,
+        training_model.next_inputs_placeholder: minibatch.outputs_data,
+        training_model.inputs_length_placeholder: minibatch.sequence_lengths,
+            training_model.l1_initial_state_placeholder: state_info["l1_init_state"],
+        training_model.postwindow_initial_state_placeholder: state_info["postwindow_init_state"],
+        training_model.kappa_initial_placeholder: state_info["kappa_init_state"],
+        training_model.lr_placeholder: lr,
+        training_model.character_codes_placeholder: minibatch.text_data,
+        training_model.character_lengths_placeholder: minibatch.text_lengths}
 
-        feed_dict = {training_model.input_placeholder : minibatch.offsets_data,
-                        training_model.next_inputs_placeholder : minibatch.next_offsets_data,
-                        training_model.initial_state_placeholder : init_state,
-                        training_model.lr_placeholder: lr}
-
-        _, current_step, summary, last_state = sess.run([training_model.reinforcement_train_op,
-                                            training_model.global_step,
-                                            training_model.summaries,
-                                            training_model.last_state],
-                                            feed_dict = feed_dict)
+        (_,
+        current_step,
+        summary,
+        l1_final_state,
+        postwindow_final_state,
+        kappa_final_state) = sess.run([training_model.reinforcement_train_op,
+                                        training_model.global_step,
+                                        training_model.summaries,
+                                        training_model.final_l1_state,
+                                        training_model.last_postwindow_lstm_state,
+                                        training_model.final_kappa],
+                                        feed_dict = feed_dict)
 
         if current_step % PARAMS.record_every == 0:
             train_summary_writer.add_summary(summary, current_step)
 
-        return last_state, lr, current_step
+        return {"l1_init_state": l1_final_state,
+                "postwindow_init_state": postwindow_final_state,
+                "kappa_init_state": kappa_final_state}, current_step
 
     def run_all_dev(dev_set):
         print("""TODO: add evaluation""")
 
-    def run_epoch(training_data, lr):
+    def run_epoch(training_data_generator, lr):
 
-        for file_group in tqdm(training_data):
-            init_state = None
+        for file_group in tqdm(training_data_generator):
+            state_info = None
 
             for minibatch in file_group:
-                _, lr, current_step = run_train_step(minibatch, lr, init_state)
-                # init_state = run_train_step(minibatch, lr, init_state)
+                state_info, current_step = run_train_step(minibatch, lr, state_info)
                 print("CURRENT STEP:", current_step)
 
                 if current_step % PARAMS.eval_every == 0:
@@ -99,10 +108,7 @@ with tf.Session() as sess:
 
         """FETCH TRAINING DATA in minibatch form"""
         print("Fetching training data...")
-        training_data_generator = create_training_data.minibatch_generator_from_directory(
-                                        PARAMS.samples_directory,
-                                        max_strokesets=PARAMS.restrict_samples
-                                        )
+        training_data_generator = datapipeline.generate_minibatches_from_dir(PARAMS.samples_directory)
         print("Training...")
         lr = run_epoch(training_data_generator, lr)
         lr = lr * PARAMS.learning_rate_decay

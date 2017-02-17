@@ -1,19 +1,50 @@
 import xml.etree.ElementTree as ET
 import numpy as np
 import os
+import sys
 import matplotlib.pyplot as plt
 from config import PARAMS
 
 class StrokeSet(object):
-    def __init__(self, strokes, data_scale=False, fname=""):
+    def __init__(self, strokes, data_scale=False, fname=None, chars=None):
         self.strokes = strokes
-        self.fname = fname
         self.scale_data = data_scale is not False
         if self.scale_data:
             self.xmean, self.ymean, self.xsdev, self.ysdev = data_scale
+        self.generator = None
+        self.all_points = None
 
     def __str__(self):
         return str([str(s) for s in self.strokes])
+
+    def length(self):
+        return sum([stroke.length() for stroke in self.strokes])
+
+    def points_generator(self, length=PARAMS.sequence_len):
+        all_numpy = self.to_numpy()
+
+        def pointsgenerator(numpyarray):
+            pointer = 0
+            while pointer < len(numpyarray):
+                yield numpyarray[pointer: pointer + length + 1]
+                pointer += length
+
+        return pointsgenerator(all_numpy)
+
+    def num_points(self):
+        if self.all_points is None:
+            self.to_numpy()
+
+        return len(self.all_points)
+
+    """def yield_points(self, length=PARAMS.sequence_len):
+        if self.generator is  None:
+
+
+            self.generator = pointsgenerator(all_numpy)
+
+        next(self.generator)
+        yield self.generator.send(length)"""
 
     def to_numpy(self):
         # Numpy array dimension Nx3
@@ -61,6 +92,9 @@ class Stroke(object):
     def __init__(self, points):
         self.points = points
 
+    def length(self):
+        return len(self.points)
+
     def __str__(self):
         return str([str(p) for p in self.points])
 
@@ -95,23 +129,12 @@ def load_strokeset_from_xml(xml_data, data_scale=False):
 
     return stroke_set
 
-def all_strokesets_from_dir(rootdir, max_strokesets=None, use_scale=True):
-    all_strokesets = []
-    if use_scale:
-        data_scale = np.genfromtxt(PARAMS.data_scale_file)
-    else:
-        data_scale = False
+def strokeset_from_file(filepath, data_scale=False):
+    # Reads the strokeset from a file and returns it.
+    xml_data = load_xml_from_file(filepath)
+    strokeset = load_strokeset_from_xml(xml_data, data_scale=data_scale)
 
-    for subdir, dirs, files in os.walk(rootdir):
-        for file in files:
-            if not (file.startswith('.')) and not file == PARAMS.data_scale_file:
-                xml_data = load_xml_from_file("{}/{}".format(subdir,file))
-                stroke_set = load_strokeset_from_xml(xml_data, data_scale=data_scale)
-                stroke_set.fname = file
-                all_strokesets.append(stroke_set)
-                if max_strokesets is not None and len(all_strokesets) >= max_strokesets:
-                    break
-        if max_strokesets is not None and len(all_strokesets) >= max_strokesets:
-            break
+    return strokeset
 
-    return all_strokesets
+if __name__ == "__main__":
+    strokeset_from_file(sys.argv[1]).plot()
