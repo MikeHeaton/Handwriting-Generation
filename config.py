@@ -12,6 +12,7 @@ class Params():
     samples_directory = os.path.abspath("training_data")
 
     data_scale_file = "data_scale_params"
+    bucket_width = 20
 
     # --- Neural Network params ------
     lstm_size = 256 # (was 400 for saved weights)
@@ -30,12 +31,12 @@ class Params():
     weights_directory = "./network_weights/"
     batch_size = 32
 
-    learning_rate_init = 5e-3
-    learning_rate_decay = 0.98
+    learning_rate_init = 5e-4
+    learning_rate_decay = 0.95
 
     num_epochs = 20
     restrict_samples = None
-    use_saved = False
+    use_saved = True
     eval_every = 100
     record_every = 10
     save_every = 100
@@ -58,3 +59,14 @@ PARAMS = Params()
 
 """NOTES: consider cell_clip on the LSTM cell, it was used in StepI and worked.
 Currently off because idk if it's necessary."""
+
+"""---Beginning epoch 18---
+Learning rate = 0.003476
+Fetching training data...
+Training...
+380it [7:01:03, 42.60s/it]
+---Beginning epoch 19---
+Learning rate = 0.003406
+Fetching training data...
+Training...
+316it [4:02:04, 28.27s/it]  """

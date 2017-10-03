@@ -31,20 +31,11 @@ class StrokeSet(object):
 
         return pointsgenerator(all_numpy)
 
-    def num_points(self):
+    def length(self):
         if self.all_points is None:
             self.to_numpy()
 
         return len(self.all_points)
-
-    """def yield_points(self, length=PARAMS.sequence_len):
-        if self.generator is  None:
-
-
-            self.generator = pointsgenerator(all_numpy)
-
-        next(self.generator)
-        yield self.generator.send(length)"""
 
     def to_numpy(self):
         # Numpy array dimension Nx3
@@ -128,6 +119,9 @@ def load_strokeset_from_xml(xml_data, data_scale=False):
     """TODO: make this neater with a comprehension"""
 
     return stroke_set
+
+def get_data_scale(directorypath):
+    return np.genfromtxt(PARAMS.data_scale_file)
 
 def strokeset_from_file(filepath, data_scale=False):
     # Reads the strokeset from a file and returns it.

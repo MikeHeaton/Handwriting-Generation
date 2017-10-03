@@ -5,6 +5,7 @@ from config import PARAMS
 import re
 from collections import defaultdict
 import numpy as np
+import queue
 
 class Sample:
     def __init__(self, strokeset, coded_text, name, linenum):
@@ -26,13 +27,54 @@ class Minibatch():
         self.sequence_lengths = sequence_lengths
         self.text_lengths = text_lengths
 
+class BatchBucketQueue():
+    # Items are pushed onto the queue using the push function.
+    # When a bucket is full, the items are pushed to a top_queue.
+    # Pull returns the first element from the top_queue.
+    # Result: minibatches grouped by the bucketing_function.
+    def __init__(self, bucketing_function, batch_size):
+        self.buckets = defaultdict(list)
+        self.topqueue = queue.Queue()
+        self.batch_size = batch_size
+        self.bucketing_function = bucketing_function
 
-def generate_samples_from_dir(rootdir):
+    def put(self, item):
+        key = self.bucketing_function(item)
+        self.buckets[key].append(item)
+        if len(self.buckets[key]) >= self.batch_size:
+            self.topqueue.put(self.buckets[key])
+            self.buckets[key] = []
+
+    def batch_available(self):
+        return not self.topqueue.empty()
+
+    def get(self):
+        return self.topqueue.get()
+
+    def queue_all(self):
+        # Move all items from the buckets to the topqueue, grouped as best
+        # as possible.
+        # Requires an orderable result from bucketing_function.
+        all_items = sum([self.buckets[i] for i in self.buckets.keys()], [])
+        self.buckets = defaultdict(list)
+
+        all_items.sort(key=self.bucketing_function)
+
+        t = 0
+        while t+self.batch_size < len(all_items):
+            self.topqueue.put(all_items[t: t+self.batch_size])
+            t += self.batch_size
+
+
+def generate_samples_from_dir(rootdir, scale=True):
     # Walk through the strokes data directory.
     # For each file, find the corresponding file in the character data dir
     # and read it.
     # Then add the text to the strokesets, and yield them as samples.
     strokes_data_dir = os.path.join(rootdir, "strokes_data")
+
+    if scale:
+        scale = read_strokesets.get_data_scale(strokes_data_dir)
 
     """TODO: Implement a shuffle of the data each iteration by
     shuffling the result of os.walk here. This will only shuffle on a
@@ -76,13 +118,14 @@ def generate_samples_from_dir(rootdir):
                 for linenum in text_dict.keys():
                     textline = text_dict[linenum]
                     strokeset = read_strokesets.strokeset_from_file(
-                                                   strokefile_dict[linenum])
+                                                   strokefile_dict[linenum],
+                                                   data_scale=scale)
                     #strokeset = None
                     """TODO: IMPLEMENT DATA SCALING"""
                     sample = Sample(strokeset, textline, charset_name, linenum)
                     yield sample
 
-def generate_long_minibatch_from_samples(list_of_samples):
+def long_minibatch_from_samples(list_of_samples):
     character_sequences = np.zeros([len(list_of_samples), PARAMS.max_char_len])
     for i in range(len(list_of_samples)):
         character_sequences[i, 0: len(list_of_samples[i].text)] = list_of_samples[i].text
@@ -106,10 +149,8 @@ def generate_long_minibatch_from_samples(list_of_samples):
     for n, points in enumerate(sequences):
         offsets_array[n, 0: len(points), :] = points
 
-    yield Minibatch(offsets_array,    character_sequences,
+    return Minibatch(offsets_array,    character_sequences,
                     sequence_lengths, character_lengths)
-
-
 
 def generate_minibatches_from_samples(list_of_samples):
     # Takes in a list of samples
@@ -160,18 +201,36 @@ def generate_minibatches_from_samples(list_of_samples):
         yield Minibatch(offsets_array,    character_sequences,
                         sequence_lengths, character_lengths)
 
-def generate_minibatches_from_dir(directory):
-    samples_generator = generate_samples_from_dir(directory)
+def generate_minibatches_from_dir(directory, scale=True):
+    def make_bucketing_function(bucket_width):
+        def bucketing_function(sample):
+            return int(round(sample.strokeset.length()/
+                             float(bucket_width))
+                       * float(bucket_width))
+        return bucketing_function
+
+    samples_generator = generate_samples_from_dir(directory, scale=scale)
+    minibatch_queue = BatchBucketQueue(
+                                make_bucketing_function(PARAMS.bucket_width),
+                                PARAMS.batch_size)
+
     while True:
         try:
-            list_of_samples = [next(samples_generator)
-                               for _ in range(PARAMS.batch_size)]
-            yield generate_long_minibatch_from_samples(list_of_samples)
+            nextsample = next(samples_generator)
+            minibatch_queue.put(nextsample)
+
+            if minibatch_queue.batch_available():
+                list_of_samples = minibatch_queue.get()
+                yield long_minibatch_from_samples(list_of_samples)
+
         except StopIteration:
             break
 
-# Put PARAMS.batch_size samples together and call generate_minibatches_from_samples
-# on it; then yield it up.
+    # Push all remaining samples onto the queue and yield them up.
+    minibatch_queue.queue_all()
+    while minibatch_queue.batch_available():
+        list_of_samples = minibatch_queue.get()
+        yield long_minibatch_from_samples(list_of_samples)
 
 
 if __name__ == "__main__":
@@ -184,7 +243,7 @@ if __name__ == "__main__":
 
     for i in generate_minibatches_from_dir(PARAMS.samples_directory):
         #print(i.offsets_data.shape)#[:,0,:])
-        print(i.inputs_data.shape)
-        print(i.outputs_data.shape)
+        print(i.sequence_lengths)#.shape)
+        #print(i.outputs_data.shape)
         #print(i.text_lengths)
         print("------")

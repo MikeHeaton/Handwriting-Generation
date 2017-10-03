@@ -43,8 +43,6 @@ with tf.Session() as sess:
                             "postwindow_init_state": training_model.postwindow_lstm_zero_state,
                             "kappa_init_state": training_model.kappa_zero_state}
 
-        print(minibatch.inputs_data.shape)
-        print(minibatch.outputs_data.shape)
         feed_dict = {
         training_model.input_placeholder: minibatch.inputs_data,
         training_model.next_inputs_placeholder: minibatch.outputs_data,
@@ -81,22 +79,20 @@ with tf.Session() as sess:
 
     def run_epoch(training_data_generator, lr):
 
-        for file_group in tqdm(training_data_generator):
+        for minibatch in tqdm(training_data_generator):
             state_info = None
+            state_info, current_step = run_train_step(minibatch, lr, state_info)
+            #print("CURRENT STEP:", current_step)
 
-            for minibatch in file_group:
-                state_info, current_step = run_train_step(minibatch, lr, state_info)
-                print("CURRENT STEP:", current_step)
-
-                if current_step % PARAMS.eval_every == 0:
-                    pass
-                    """TODO: add eval"""
-                    #print("Evaluating at step {}:".format(current_step))
-                    #run_all_dev(None)
-                if current_step % PARAMS.save_every == 0:
-                    print("SAVING")
-                    saver.save(sess, PARAMS.weights_directory,
-                                global_step=training_model.global_step)
+            if current_step % PARAMS.eval_every == 0:
+                pass
+                """TODO: add eval"""
+                #print("Evaluating at step {}:".format(current_step))
+                #run_all_dev(None)
+            if current_step % PARAMS.save_every == 0:
+                #print("SAVING")
+                saver.save(sess, PARAMS.weights_directory,
+                            global_step=training_model.global_step)
         return lr
 
     """

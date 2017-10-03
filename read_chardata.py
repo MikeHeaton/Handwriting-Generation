@@ -8,7 +8,7 @@ class Text:
         self.coded_lines = {line: [PARAMS.char_to_int[c] for c in textdict[line]]
                             for line in textdict.keys()}
 
-    """TODO: Clean the text re " . " and etc."""
+    """TODO: Clean the text re " . " (space . space) and etc."""
 
 def load_textdict_from_xml(xml_data, data_scale=False):
     root = xml_data.getroot()

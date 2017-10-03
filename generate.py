@@ -3,10 +3,13 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from config import PARAMS
 import numpy as np
+import read_strokesets
 from read_strokesets import Point, Stroke, StrokeSet
 from tqdm import tqdm
+import sys
+import os
 
-def generate_sample(length=500, use_saved=True):
+def generate_sample(text, length=500, use_saved=True):
     # Generate a sequence of (normalised) offsets from the neural network.
     # Return it as an array.
     with tf.Session() as sess:
@@ -34,28 +37,45 @@ def generate_sample(length=500, use_saved=True):
             return np.random.multivariate_normal(mean, cov_matrix)
 
         # Initialise feed values for the network
+        character_codes = [PARAMS.char_to_int[c] for c in text]
+        text_data = np.zeros([1, PARAMS.max_char_len])
+        text_data[0, 0: len(character_codes)] = character_codes
+        input_len = np.ones([1], dtype=np.int32)
+
+        text_length = np.zeros([1], dtype=np.int32)
+        text_length[0] = len(text)
+
         prev_point = np.array([[[0.0, 0.0, 1]]])
-        prev_state = np.zeros([1, 2*PARAMS.lstm_size*PARAMS.number_of_layers])
+        prev_l1_state = generating_model.lstm1_zerostate()
+        prev_postwindow_state = generating_model.postwindowlstm_zerostate()
+        prev_kappa = generating_model.kappa_zerostate()
 
         print("Generating points...")
         all_offsets = []
         for _ in tqdm(range(length)):
-            # Generate parameters for the next point distribution,
-            # using the network.
-            feed_dict = {generating_model.input_placeholder        : prev_point,
-                         generating_model.initial_state_placeholder: prev_state}
+            feed_dict = {generating_model.input_placeholder                   : prev_point,
+                         generating_model.inputs_length_placeholder           : input_len,
+                         generating_model.l1_initial_state_placeholder        : prev_l1_state,
+                         generating_model.postwindow_initial_state_placeholder: prev_postwindow_state,
+                         generating_model.kappa_initial_placeholder           : prev_kappa,
+                         generating_model.character_codes_placeholder         : text_data,
+                         generating_model.character_lengths_placeholder       : text_length}
 
             (bernoulli_param, pi, rho,
             mu1, mu2,
             sigma1, sigma2,
-            prev_state) = sess.run([generating_model.p_bernoulli,
+            prev_l1_state,
+            prev_postwindow_state,
+            prev_kappa) = sess.run([generating_model.p_bernoulli,
                                     generating_model.p_pi,
                                     generating_model.p_rho,
                                     generating_model.p_mu1,
                                     generating_model.p_mu2,
                                     generating_model.p_sigma1,
                                     generating_model.p_sigma2,
-                                    generating_model.last_state],
+                                    generating_model.final_l1_state,
+                                    generating_model.last_postwindow_lstm_state,
+                                    generating_model.final_kappa],
                                     feed_dict = feed_dict)
 
             # Using parameters, generate a randomly chosen next point.
@@ -88,8 +108,9 @@ def strokeset_from_offsets(all_offsets):
 
     # Offsets have been normalised to mean 0, stdev 1.
     # We can de-normalise them.
-    print("Scale parameters:")
-    xmean, ymean, xsdev, ysdev = list(np.genfromtxt(PARAMS.samples_directory + "/" + PARAMS.data_scale_file))
+    scale = read_strokesets.get_data_scale(
+                        os.path.join(PARAMS.samples_directory, "strokes_data"))
+    xmean, ymean, xsdev, ysdev = list(scale)
     print(xmean, ymean, xsdev, ysdev)
 
     for t in range(len(all_offsets)):
@@ -111,7 +132,7 @@ def strokeset_from_offsets(all_offsets):
     return StrokeSet(strokeset_strokes)
 
 if __name__ == "__main__":
-    all_offsets = generate_sample(length=500)
+    all_offsets = generate_sample(sys.argv[1], length=500, use_saved=True)
 
     print("Making strokeset")
     strokeset = strokeset_from_offsets(all_offsets)
