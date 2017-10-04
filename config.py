@@ -1,4 +1,4 @@
-#--- Parameters dictionary ---#
+# --- Parameters dictionary ---#
 # Each file should have
 # from config import PARAMS
 # in header; then access parameters as
@@ -6,6 +6,7 @@
 import numpy as np
 import os
 from collections import defaultdict
+
 
 class Params():
     # --- Data reading params ---
@@ -15,7 +16,7 @@ class Params():
     bucket_width = 20
 
     # --- Neural Network params ------
-    lstm_size = 256 # (was 400 for saved weights)
+    lstm_size = 256  # (was 400 for saved weights)
     number_of_postwindow_layers = 1
     sequence_len = 400
 
@@ -24,7 +25,6 @@ class Params():
     dropout_keep_prob = 0.8
 
     grad_clip = 10
-
 
     # --- Model training params ------
 
@@ -47,9 +47,8 @@ class Params():
     max_char_len = 64
 
     int_to_char = {**{0: '.', 1: ' '},
-                    **{i - 63: chr(i) for i in range(65,91)},
-                    **{i - 69: chr(i) for i in range(97,123)}}
-    #int_to_char = defaultdict(int, int_to_char)
+                   **{i - 63: chr(i) for i in range(65, 91)},
+                   **{i - 69: chr(i) for i in range(97, 123)}}
 
     char_to_int = defaultdict(int, {c: i for i, c in int_to_char.items()})
     num_characters = len(int_to_char)

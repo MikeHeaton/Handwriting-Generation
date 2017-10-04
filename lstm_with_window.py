@@ -232,12 +232,13 @@ def l1windowlayers_test():
 
         sess.run(tf.global_variables_initializer())
         output, state = sess.run([rnn_outputs, last_state],
-                          feed_dict={input_placeholder: dummystrokes,
-                                     char_placeholder: dummychars})
+                                 feed_dict={input_placeholder: dummystrokes,
+                                            char_placeholder: dummychars})
 
         print("Output: ", [i.shape for i in output])
         print("State: ", [i.shape for i in state])
         print("l1window cell runs ok :-D")
+
 
 def alllayers_test():
     with tf.Session() as sess:
@@ -298,8 +299,8 @@ def alllayers_test():
 
         sess.run(tf.global_variables_initializer())
         output, state = sess.run([rnn_outputs, last_state],
-                          feed_dict={input_placeholder: dummystrokes,
-                                     char_placeholder: dummychars})
+                                 feed_dict={input_placeholder: dummystrokes,
+                                            char_placeholder: dummychars})
         print("allwindow cell runs ok \\^o^/")
         print("Inputs: ", [i.shape for i in alllayerscell.all_layer_inputs])
         print("Output: ", [j.shape for i in output for j in i])
@@ -309,6 +310,5 @@ def alllayers_test():
 
 if __name__ == "__main__":
     """Run test with dummy tensors"""
-    #l1windowlayers_test()
-
+    l1windowlayers_test()
     alllayers_test()

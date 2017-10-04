@@ -197,12 +197,13 @@ class HandwritingModel:
                                                  self.p_mu1, self.p_mu2,
                                                  self.p_sigma1, self.p_sigma2,
                                                  self.p_rho)
-            weighted_densities = tf.mul(predicted_densities_per_gaussian, self.p_pi)
+            weighted_densities = tf.mul(predicted_densities_per_gaussian,
+                                        self.p_pi)
             density_by_timestep = tf.reduce_sum(weighted_densities, axis=2)
 
             # EOS loss:
             # standard cross-entropy loss.
-            bernoulli_density = (self.p_bernoulli       * eos_data +
+            bernoulli_density = (self.p_bernoulli * eos_data +
                                  (1 - self.p_bernoulli) * (1-eos_data))
 
             # Make these into losses
@@ -212,8 +213,10 @@ class HandwritingModel:
             self.total_loss = tf.reduce_mean(loss_by_time_step)
 
             tf.summary.scalar('sample_loss', self.total_loss)
-            tf.summary.scalar('bernoulli_density', tf.reduce_mean(bernoulli_density))
-            tf.summary.scalar('gaussian_density', tf.reduce_mean(density_by_timestep))
+            tf.summary.scalar('bernoulli_density',
+                              tf.reduce_mean(bernoulli_density))
+            tf.summary.scalar('gaussian_density',
+                              tf.reduce_mean(density_by_timestep))
             # pi_var is a measure of how much the pi parameter varies across
             # time steps. This is an interesting measure of how well the network
             # is learning, so log it.
@@ -223,17 +226,20 @@ class HandwritingModel:
         with tf.name_scope("TRAIN"):
 
             rein_optimizer = tf.train.RMSPropOptimizer(self.lr_placeholder)
-            self.global_step = tf.Variable( 0, name='global_step',
-                                            trainable=False)
+            self.global_step = tf.Variable(0, name='global_step',
+                                           trainable=False)
 
             # Calculate and clip the gradients.
             tvars = tf.trainable_variables()
-            self.grads =  tf.gradients(self.total_loss, tvars)
-            self.grads = [tf.clip_by_value(g, -PARAMS.grad_clip, PARAMS.grad_clip) for g in self.grads]
+            self.grads = tf.gradients(self.total_loss, tvars)
+            self.grads = [tf.clip_by_value(g, -PARAMS.grad_clip,
+                                           PARAMS.grad_clip)
+                          for g in self.grads]
 
             # Apply the gradients.
             optimizer = tf.train.AdamOptimizer(self.lr_placeholder)
-            self.reinforcement_train_op = optimizer.apply_gradients(zip(self.grads, tvars), global_step=self.global_step)
+            self.reinforcement_train_op = optimizer.apply_gradients(zip(self.grads, tvars),
+                                                                    global_step=self.global_step)
             self.summaries = tf.summary.merge_all()
 
     def kappa_zerostate(self):
