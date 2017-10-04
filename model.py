@@ -29,7 +29,7 @@ class HandwritingModel:
                                                            None,
                                                            3))
 
-            self.next_inputs_placeholder = tf.placeholder(
+            self.next_inputs = tf.placeholder(
                                                         tf.float32,
                                                         shape=(self.batch_size,
                                                                None,
@@ -56,8 +56,9 @@ class HandwritingModel:
                                                PARAMS.max_char_len),
                                         name="character_codes_placeholder")
 
-            self.character_lengths_placeholder = tf.placeholder(tf.int32,
-                                        shape=( self.batch_size),
+            self.character_lengths_placeholder = tf.placeholder(
+                                        tf.int32,
+                                        shape=(self.batch_size),
                                         name="character_lengths_placeholder")
 
             characters_1hot = tf.one_hot(self.character_codes_placeholder,
@@ -70,19 +71,20 @@ class HandwritingModel:
             l1cell = tf.nn.rnn_cell.LSTMCell(
                             3 * PARAMS.window_gaussians,
                             state_is_tuple=False,
-                            #cell_clip=1,
+                            # cell_clip=1,
                             initializer=tf.contrib.layers.xavier_initializer()
                             )
             l1cell = dropoutwrap(l1cell)
 
-            dualcell = lstm_with_window.LayerOneAndWindowCell(l1cell, characters_1hot,
-                                             reuse=False)
+            dualcell = lstm_with_window.LayerOneAndWindowCell(l1cell,
+                                                              characters_1hot,
+                                                              reuse=False)
 
             def make_postwindow_lstm():
                 cell = tf.nn.rnn_cell.LSTMCell(
                             PARAMS.lstm_size,
                             state_is_tuple=False,
-                            #cell_clip=1,
+                            # cell_clip=1,
                             initializer=tf.contrib.layers.xavier_initializer()
                             )
 
@@ -124,11 +126,12 @@ class HandwritingModel:
             network_output = output_layer
 
         with tf.name_scope("LOSS"):
-            # next_inputs_placeholder contains the correct predicted point
+            # next_inputs contains the correct predicted point
             # from the training data. Split it into [x1, x2, eos] tensors.
 
             x1_data, x2_data, eos_data = (tf.squeeze(x, axis=2) for x in
-                                          tf.split(2, 3, self.next_inputs_placeholder))
+                                          tf.split(2, 3,
+                                                   self.next_inputs))
 
             # Frequency density of predicted points is compared to each
             # gaussian in the mix individually.
@@ -136,25 +139,25 @@ class HandwritingModel:
             # num_gaussians times, so that we can calculate frequency
             # densities for every gaussian at once.
             x1_data, x2_data = [tf.stack([x] * PARAMS.num_gaussians,
-                                      axis=2) for x in [x1_data, x2_data]]
+                                         axis=2) for x in [x1_data, x2_data]]
 
             # ___PROCESS THE OUTPUT_LAYER INTO THE GAUSSIAN MIXTURE___
 
             # > Take first element as bernoulli param for end-of-stroke.
-            phat_bernoulli   = output_layer[:, :, 0]
+            phat_bernoulli = output_layer[:, :, 0]
             self.p_bernoulli = tf.nn.sigmoid(phat_bernoulli)
 
             # > Split remaining elements into parameters for the gaussians.
             predicted_gaussian_params = tf.reshape(network_output[:, :, 1:],
-                                                    [self.batch_size,
-                                                     -1,
-                                                     #sequence_len,
-                                                     PARAMS.num_gaussians,
-                                                     6])
+                                                   [self.batch_size,
+                                                    -1,
+                                                    # sequence_len,
+                                                    PARAMS.num_gaussians,
+                                                    6])
             (phat_pi, phat_mu1, phat_mu2,
-            phat_sigma1, phat_sigma2,
-            phat_rho)               = (tf.squeeze(x, axis=3) for x in
-                                    tf.split(3, 6, predicted_gaussian_params))
+             phat_sigma1, phat_sigma2,
+             phat_rho) = (tf.squeeze(x, axis=3) for x in
+                          tf.split(3, 6, predicted_gaussian_params))
 
             # > Transform the phat (p-hat) parameters into proper distribution
             # parameters, by normalising them as described in
@@ -168,14 +171,14 @@ class HandwritingModel:
 
             def density_2d_gaussian(x1, x2, mu1, mu2, s1, s2, rho):
                 z = (tf.square(tf.div(tf.sub(x1, mu1), s1)) +
-                   tf.square(tf.div(tf.sub(x2, mu2), s2)) -
-                   2 * tf.div(tf.mul(rho,
-                                     tf.mul(tf.sub(x1, mu1),
-                                            tf.sub(x2, mu2))),
-                              tf.mul(s1, s2)))
-                R = 1-tf.square(rho)
-                numerator = tf.exp(tf.div(-z,2*R))
-                normfactor = 2*np.pi*tf.mul(tf.mul(s1, s2), tf.sqrt(R))
+                     tf.square(tf.div(tf.sub(x2, mu2), s2)) -
+                     2 * tf.div(tf.mul(rho,
+                                       tf.mul(tf.sub(x1, mu1),
+                                              tf.sub(x2, mu2))),
+                                tf.mul(s1, s2)))
+                R = 1 - tf.square(rho)
+                numerator = tf.exp(tf.div(-z, 2 * R))
+                normfactor = 2 * np.pi * tf.mul(tf.mul(s1, s2), tf.sqrt(R))
                 result = tf.div(numerator, normfactor)
                 return result
 
@@ -186,14 +189,14 @@ class HandwritingModel:
             #       EOS VALUE FOR THE NEXT POINT
             #    (TAKE NEGATIVE LOG OF BOTH TO MAKE A MINIMISABLE LOSS)___
 
-
             # Positional loss:
             # Get the density of the actual next point in each gaussian,
             # then weight them by self.p_pi to get the weighted density.
-            predicted_densities_per_gaussian = density_2d_gaussian(x1_data, x2_data,
-                                                        self.p_mu1, self.p_mu2,
-                                                        self.p_sigma1, self.p_sigma2,
-                                                        self.p_rho)
+            predicted_densities_per_gaussian = density_2d_gaussian(
+                                                 x1_data, x2_data,
+                                                 self.p_mu1, self.p_mu2,
+                                                 self.p_sigma1, self.p_sigma2,
+                                                 self.p_rho)
             weighted_densities = tf.mul(predicted_densities_per_gaussian, self.p_pi)
             density_by_timestep = tf.reduce_sum(weighted_densities, axis=2)
 
@@ -237,14 +240,11 @@ class HandwritingModel:
         return np.zeros([self.batch_size, PARAMS.window_gaussians])
 
     def postwindowlstm_zerostate(self):
-        return np.zeros([self.batch_size, PARAMS.lstm_size *2])
+        return np.zeros([self.batch_size, PARAMS.lstm_size * 2])
 
     def lstm1_zerostate(self):
-        return np.zeros([self.batch_size, PARAMS.lstm_size *2])
+        return np.zeros([self.batch_size, PARAMS.lstm_size * 2])
+
 
 if __name__ == "__main__":
     testmodel = HandwritingModel(generate_mode=False)
-    """with tf.Session() as sess:
-        saver = tf.train.Saver()
-        saver.restore(sess, tf.train.latest_checkpoint(PARAMS.weights_directory))
-    print("Model created and variables loaded OK.")"""
