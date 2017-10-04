@@ -3,9 +3,18 @@ from config import PARAMS
 import tensorflow as tf
 import numpy as np
 import lstm_with_window
+from tensorflow.python.ops import array_ops
+
 
 class HandwritingModel:
     def __init__(self, generate_mode=False):
+        def dropoutwrap(cell):
+            if (not self.generate_mode) and PARAMS.dropout_keep_prob < 1:
+                cell = tf.nn.rnn_cell.DropoutWrapper(
+                                cell,
+                                output_keep_prob=PARAMS.dropout_keep_prob)
+            return cell
+
         self.generate_mode = generate_mode
         if self.generate_mode:
             self.batch_size = 1
@@ -30,23 +39,13 @@ class HandwritingModel:
                                                         tf.int32,
                                                         shape=(self.batch_size))
 
-            self.l1_initial_state_placeholder = tf.placeholder(
-                                                tf.float32,
-                                                shape=(self.batch_size,
-                                                       PARAMS.lstm_size * 2))
-
-            self.postwindow_initial_state_placeholder = tf.placeholder(
+            """TODO: FIX SHAPE"""
+            self.rnn_initial_state_placeholder = tf.placeholder(
                             tf.float32,
                             shape=(self.batch_size,
                                    PARAMS.lstm_size * 2 *
                                    PARAMS.number_of_postwindow_layers),
-                            name="postwindow_initial_state_placeholder")
-
-            self.kappa_initial_placeholder = tf.placeholder(
-                                            tf.float32,
-                                            shape=(self.batch_size,
-                                                   PARAMS.window_gaussians),
-                                            name="kappa_initial_placeholder")
+                            name="rnn_initial_state_placeholder")
 
             self.lr_placeholder = tf.placeholder(tf.float32,
                                                  name="lr_placeholder")
@@ -67,93 +66,66 @@ class HandwritingModel:
                                          off_value=0.0,
                                          dtype=tf.float32)
 
-        with tf.name_scope("LAYER_1_AND_WINDOW"):
-            lstm_cell_1 = tf.nn.rnn_cell.LSTMCell(
+        with tf.name_scope("LSTM_LAYERS"):
+            l1cell = tf.nn.rnn_cell.LSTMCell(
+                            3 * PARAMS.window_gaussians,
+                            state_is_tuple=False,
+                            #cell_clip=1,
+                            initializer=tf.contrib.layers.xavier_initializer()
+                            )
+            l1cell = dropoutwrap(l1cell)
+
+            dualcell = lstm_with_window.LayerOneAndWindowCell(l1cell, characters_1hot,
+                                             reuse=False)
+
+            def make_postwindow_lstm():
+                cell = tf.nn.rnn_cell.LSTMCell(
                             PARAMS.lstm_size,
                             state_is_tuple=False,
                             #cell_clip=1,
                             initializer=tf.contrib.layers.xavier_initializer()
                             )
 
-            #self.lstm_1_zero_state = lstm_cell_1.zero_state(batch_size=self.batch_size,
-            #                                                dtype=tf.float32)
-            self.lstm_1_zero_state = np.zeros([self.batch_size, PARAMS.lstm_size *2])
+                return cell
 
-            (outputs,
-             self.final_l1_state,
-             self.final_kappa) = lstm_with_window.make_l1_and_window_layers(
-                                    lstm_cell_1,
-                                    self.input_placeholder,
-                                    self.inputs_length_placeholder,
-                                    characters_1hot,
-                                    self.character_lengths_placeholder,
-                                    self.l1_initial_state_placeholder,
-                                    self.kappa_initial_placeholder,
-                                    time_major=False)
+            postwindowcells = [dropoutwrap(make_postwindow_lstm())
+                               for _
+                               in range(PARAMS.number_of_postwindow_layers)]
 
-        self.kappa_zero_state = np.zeros([self.batch_size, PARAMS.window_gaussians])
+            all_lstm_layers = WindowedMultiRNNCell(dualcell, postwindowcells)
 
-        with tf.name_scope("OTHER_LSTM_LAYERS"):
-            lstm_cell_2 = tf.nn.rnn_cell.LSTMCell(
-                            PARAMS.lstm_size,
-                            state_is_tuple=False,
-                            #cell_clip=1,
-                            initializer=tf.contrib.layers.xavier_initializer()
-                            )
+            lstm_zero_state = all_lstm_layers.zero_state(PARAMS.batch_size,
+                                                         tf.float32)
 
-            stacked_lstm_cell = tf.nn.rnn_cell.MultiRNNCell(
-                            [lstm_cell_2] * PARAMS.number_of_postwindow_layers,
-                            state_is_tuple=False
-                            )
-
-            if (not self.generate_mode) and PARAMS.dropout_keep_prob < 1:
-                stacked_lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
-                                    stacked_lstm_cell,
-                                    output_keep_prob = PARAMS.dropout_keep_prob)
-
-            self.postwindow_lstm_zero_state = np.zeros([self.batch_size, PARAMS.lstm_size *2])
-
-
-            """stacked_lstm_cell.zero_state(
-                                                    batch_size=self.batch_size,
-                                                    dtype=tf.float32)"""
-
-            # Dynamic_rnn implementation
-            lstm_outputs, self.last_postwindow_lstm_state = tf.nn.dynamic_rnn(
-                            cell=stacked_lstm_cell,
-                            inputs=outputs,
-                            initial_state=self.postwindow_initial_state_placeholder,
+            rnn_outputs, last_state = tf.nn.dynamic_rnn(
+                            cell=alllayerscell,
+                            inputs=input_placeholder,
+                            initial_state=self.rnn_initial_state_placeholder,
                             dtype=tf.float32
                             )
 
         with tf.name_scope("FC_LAYER"):
-            W = tf.get_variable("W_out",
-                            shape=(PARAMS.lstm_size, PARAMS.output_size),
-                            initializer= tf.contrib.layers.xavier_initializer()
+            # There are skip connections to the final layer from
+            # the input layer and all hidden layers except the window,
+            # which is index=1 of the rnn_outputs.
+            fclayer_inputs = ([self.input_placeholder, rnn_outputs[0]] +
+                              rnn_outputs[2:])
+            fclayer_input = array_ops.concat(fclayer_inputs, axis=1,
+                                             name='fc_input')
+
+            fc_output = tf.contrib.layers.fully_connected(
+                            fclayer_input,
+                            PARAMS.output_size,
+                            activation_fn=tf.nn.relu,
+                            weights_initializer=tf.contrib.layers.xavier_initializer(),
+                            biases_initializer=tf.zeros_initializer(),
                             )
-
-            b = tf.get_variable("b_out",
-                            initializer= tf.zeros_initializer(shape=[PARAMS.output_size])
-                            )
-            lstm_outputs = tf.reshape(lstm_outputs, [-1, PARAMS.lstm_size])
-
-            output_layer = tf.matmul(lstm_outputs, W)
-            output_layer = tf.add(output_layer, b)
-            output_layer = tf.reshape(output_layer, [self.batch_size,
-                                                     -1,
-                                                     PARAMS.output_size])
-
-            """TODO: make this tensor multiplication into a pattern,
-            to make it neater to reuse"""
 
             network_output = output_layer
 
         with tf.name_scope("LOSS"):
             # next_inputs_placeholder contains the correct predicted point
             # from the training data. Split it into [x1, x2, eos] tensors.
-
-            """TODO: move placeholders to input layer. Be careful it doesn't
-            mess up the already trained weights. (?)"""
 
             x1_data, x2_data, eos_data = (tf.squeeze(x, axis=2) for x in
                                           tf.split(2, 3, self.next_inputs_placeholder))
